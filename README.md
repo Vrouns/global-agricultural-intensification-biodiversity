@@ -16,7 +16,7 @@ Code to quantify global biodiversity impacts of agricultural land-use intensific
    - Crop-type–specific Impacts
 3. R Results - Analysis and Visualization
 4. How to Open the Data
-
+5. [Shiny Data visualizer](https://veronikaschlosser.shinyapps.io/biodiv/) 
 ---
 
 ## I) Compile Land-use Intensity Dataset 
@@ -132,6 +132,14 @@ print(s)
 ```
 
 ---
+
+## V. Interactive data visualization
+
+An interactive Shiny application for exploring the results is available here:
+
+[https://](https://veronikaschlosser.shinyapps.io/biodiv/)
+
+The app allows exploration of land-use intensity, crop-specific areas, and biodiversity impacts across space and time.
 
 ## Notes
 
