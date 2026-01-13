@@ -137,7 +137,7 @@ print(s)
 
 An interactive Shiny application for exploring the results is available here:
 
-[https://](https://veronikaschlosser.shinyapps.io/biodiv/)
+https://veronikaschlosser.shinyapps.io/biodiv/
 
 The app allows exploration of land-use intensity, crop-specific areas, and biodiversity impacts across space and time.
 
