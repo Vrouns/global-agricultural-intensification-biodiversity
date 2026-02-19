@@ -16,11 +16,11 @@ from datetime import datetime
 import csv
 
 # Define paths to stative variables
-dataset_used = "LUH2"
-ecoreg_path = "H:/02_Projekte/02_LUC biodiversity paper/02_data/ecoregions/wwf_terr_ecos.shp"
+dataset_used = "LUH2_GCB2025"
+ecoreg_path = "H:/02_Projekte/allgemein_biodiversity_impact/02_data/ecoregions/wwf_terr_ecos.shp"
 CF_path = "../literature/Scherer-et-al_2023/CF_domain.csv"
 country_path = f"../data/04_bia_inputs/{dataset_used}/country_raster.tif"
-shpcountries_path = "H:/02_Projekte/02_LUC biodiversity paper/02_data/country_shp/ne_110m_admin_0_countries.shp"
+shpcountries_path = "H:/02_Projekte/allgemein_biodiversity_impact/02_data/country_shp/ne_110m_admin_0_countries.shp"
 now = datetime.now().isoformat()
 status_log_file = f"../data/03_intensity/{dataset_used}/status_log/status_log.csv"  
 out_path = f"../output/biodiversity_impact_assessment/{dataset_used}/"
@@ -72,7 +72,7 @@ def load_CF_rasters(lu_type):
         )
         
         # Load the CF raster and append it to the list
-        CF_raster_path = f"../data/04_bia_inputs/{dataset_used}/CF_raster/habitat_{habitat_id}.tif"
+        CF_raster_path = f"../data/04_bia_inputs/LUH2/CF_raster/habitat_{habitat_id}.tif"
         with rasterio.open(CF_raster_path) as src:
             CF_rasters.append(src.read(1))
 
@@ -199,7 +199,7 @@ def calculate_biodiversity_impact(lu_type, year, CF_stack, country_raster):
 
 
 # Main execution
-lu_types = [ "crops","plantations"]
+lu_types = [ "crops","plantations","pasture"]
 start_year = 2000
 end_year = 2019
 years = range(start_year, end_year+1)

@@ -17,19 +17,20 @@ library(terra)
 library(tidyr)
 
 # define paths 
-CG_org_path <- "../data/01_raw/CROPGRID/CROPGRIDSv1.08_NC_maps/"
-CG_pred_path <- "../data/05_crop_types/CG/time_series/"
-out_path <- "../data/05_crop_types/CG/"
+version_LUH2 <- "LUH2_GCB2025" # either LUH2 or LUH2_GCB2025
+CG_org_path <- "data/01_raw/CROPGRID/CROPGRIDSv1.08_NC_maps/"
+CG_pred_path <- "data/05_crop_types/CG/time_series/"
+out_path <- paste0("data/05_crop_types/CG/", version_LUH2,"/")
 
-c_intensity_path <- "../data/03_intensity/LUH2/crops/"
-tc_intensity_path = "../data/03_intensity/LUH2/plantations/"
-bia_path <- "../output/biodiversity_impact_assessment/LUH2/"
+c_intensity_path <- paste0("data/03_intensity/",version_LUH2,"/crops/")
+tc_intensity_path = paste0("data/03_intensity/",version_LUH2,"/plantations/")
+bia_path <- paste0("output/biodiversity_impact_assessment/",version_LUH2)
 
 lu_types <- c("crops", "plantations")
 int_levels <- c("light", "med", "high")
 
-country_rast <- rast("../data/04_bia_inputs/LUH2/country_raster.tif")
-shp_country <- vect("H:/02_Projekte/02_LUC biodiversity paper/02_data/country_shp/ne_110m_admin_0_countries.shp")
+country_rast <- rast("data/04_bia_inputs/LUH2/country_raster.tif")
+shp_country <- vect("H:/02_Projekte/allgemein_biodiversity_impact/02_data/country_shp/ne_110m_admin_0_countries.shp")
 
 
 # Extract plantations
@@ -43,7 +44,7 @@ treecrops <- c("abaca", "agave", "almond", "apple", "apricot", "areca", "avocado
                "tea", "tung", "vanilla", "walnut")
 year = 2000
 
-for (year in c(2000:2019)){
+for (year in c(2001:2019)){
   # Get cropgrid files for this year
   if (year == 2020){# first: Resample CROPGRIDS to LUH2 resolution 
     
@@ -122,8 +123,8 @@ for (year in c(2000:2019)){
 
   
   # Save
-  writeRaster(crops_r_cor, paste0(out_path, "crop_types_", year, ".tif"), overwrite = TRUE)
-  writeRaster(treecrops_r_cor, paste0(out_path, "treecrop_types_", year, ".tif"), overwrite = TRUE)
+  writeRaster(crops_r_cor, paste0(out_path, "/crop_types_", year, ".tif"), overwrite = TRUE)
+  writeRaster(treecrops_r_cor, paste0(out_path, "/treecrop_types_", year, ".tif"), overwrite = TRUE)
   
 }
 
@@ -136,7 +137,7 @@ for (year in c(2000:2019)){
     if (lu_type == "plantations"){lu_p <- "treecrop"}
     
     
-    intensity_path <- paste0("../data/03_intensity/LUH2/", lu_type, "/")
+    intensity_path <- paste0("data/03_intensity/",version_LUH2,"/",lu_type, "/")
     types_path <- paste0(out_path,lu_p, "_types_", year, ".tif")
     impact_path <- paste0(bia_path, "/", lu_type,"/", lu_type,"_impact_", year, ".tif")
     
@@ -207,9 +208,6 @@ for (year in c(2000:2019)){
 library(data.table)
 library(writexl)
 
-bia_path <- "./output/biodiversity_impact_assessment/LUH2/"
-
-
 # function to read csv and add land use type as column 
 prep_table <- function(filepath, lu_type){
   df <- read.csv(filepath)
@@ -218,12 +216,12 @@ prep_table <- function(filepath, lu_type){
 }
 
 # start with crops 
-crop_files <- list.files(paste0(bia_path,"crops/"), pattern = "type", 
+crop_files <- list.files(file.path(bia_path,"crops"), pattern = "type", 
                          full.names = T)
 crop_list <- lapply(crop_files, prep_table, "crops")
 
 #same for plantations 
-plant_files <- list.files(paste0(bia_path,"plantations/"), pattern = "type", 
+plant_files <- list.files(file.path(bia_path,"plantations"), pattern = "type", 
                           full.names = T)
 plant_list <- lapply(plant_files, prep_table, "plantations")
 

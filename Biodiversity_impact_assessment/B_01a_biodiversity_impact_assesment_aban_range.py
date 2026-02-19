@@ -20,7 +20,7 @@ from scipy.ndimage import labeled_comprehension
 CF_path = "../literature/Scherer-et-al_2023/CF_domain.csv"
 country_path = "../data/04_bia_inputs/LUH2/country_raster.tif"
 area_path = "../data/03_intensity/LUH2/area_ha.tif"
-shpcountries_path = "H:/02_Projekte/02_LUC biodiversity paper/02_data/country_shp/ne_110m_admin_0_countries.shp"
+shpcountries_path = "H:/02_Projekte/allgemein_biodiversity_impact/02_data/country_shp/ne_110m_admin_0_countries.shp"
 
 
 # Load CF data 
@@ -38,10 +38,14 @@ CF_raster_path = "../data/04_bia_inputs/LUH2/CF_raster/habitat_9.tif"
 with rasterio.open(CF_raster_path) as src:
     CF_raster = np.nan_to_num((src.read(1)), nan = 0)
 
-
+LUH2_path = f"../../04_Intensification_TS_expansion/data/LUH_update_states4.nc"
+out_path_biodiv = "../output/biodiversity_impact_assessment/LUH2_GCB2025/"
+out_path_area = "../output/area_intensity/LUH2_GCB2025/" 
+path_intensity = "../data/03_intensity/LUH2_GCB2025/"
 
 ## Function to calculate biodiversity impact
-def calculate_biodiversity_impact_abandonned(year, lu_type, cell_areas, country_raster, profile,calc_type,CF_raster = None):
+def calculate_biodiversity_impact_abandonned(year, lu_type, cell_areas, country_raster, profile,calc_type,LUH2_path,  
+                                             out_path_area=None, path_intensity=None,out_path_biodiv=None,CF_raster = None):
     ''' 
     Calculates biodiversity impact for abandand land and a given year 
     Parameters: 
@@ -54,11 +58,7 @@ def calculate_biodiversity_impact_abandonned(year, lu_type, cell_areas, country_
     '''
     
     assert calc_type == "biodiversity" or calc_type == "area" , 'type must be biodiversity or area'
-
-    
-    LUH2_path = f"../data/01_raw/LUH2_data/states.nc"
-
-    assert os.path.exists(LUH2_path), f"Chunk file not found: {LUH2_path}"
+    assert os.path.exists(LUH2_path), f"Path not found: {LUH2_path}"
     LUH2_file = netCDF4.Dataset(LUH2_path)
     
     year_idx = year - 850
@@ -77,9 +77,8 @@ def calculate_biodiversity_impact_abandonned(year, lu_type, cell_areas, country_
         impact_stack = sec_land * cell_areas * CF_raster
 
         # Define output paths
-        out_path = "../output/biodiversity_impact_assessment/LUH2/"
-        output_tif_filename = f"{out_path}{lu_type}/{lu_type}_impact_{year}.tif"
-        output_csv_filename = f"{out_path}{lu_type}/{lu_type}_impact_{year}.csv"
+        output_tif_filename = f"{out_path_biodiv}{lu_type}/{lu_type}_impact_{year}.tif"
+        output_csv_filename = f"{out_path_biodiv}{lu_type}/{lu_type}_impact_{year}.csv"
 
         with rasterio.open(output_tif_filename, 'w', **profile) as dst:
             dst.write(impact_stack,1)  # Write each intensity's impact to a separate band
@@ -88,11 +87,9 @@ def calculate_biodiversity_impact_abandonned(year, lu_type, cell_areas, country_
     elif calc_type == "area": 
         impact_stack = sec_land * cell_areas
 
-        # Define output paths
-        out_path = "../output/area_intensity/LUH2/CG/" 
 
-        output_csv_filename = f"{out_path}{lu_type}_intensity_{year}.csv"
-        output_tif_filename = f"../data/03_intensity/LUH2/{lu_type}/{lu_type}_intensity_{year}.tif"
+        output_csv_filename = f"{out_path_area}{lu_type}_intensity_{year}.csv"
+        output_tif_filename = f"{path_intensity}/{lu_type}/{lu_type}_intensity_{year}.tif"
         with rasterio.open(output_tif_filename, 'w', **profile) as dst:
             dst.write(impact_stack,1)  # Write each intensity's impact to a separate band
 
@@ -142,9 +139,7 @@ years = range(start_year, end_year + 1)
 
 for year in years:
     print(year)
-    calculate_biodiversity_impact_abandonned(year,"abandoned", cell_areas, country_raster, profile,calc_type="area")
-    #calculate_biodiversity_impact_abandonned(year,"rangeland", cell_areas, country_raster, profile,calc_type="biodiversity", CF_raster=CF_raster)
-
-
-
+    for lu_type in ["abandoned","rangeland"]:
+        calculate_biodiversity_impact_abandonned(year,lu_type=lu_type, cell_areas=cell_areas, country_raster=country_raster, profile=profile,calc_type="biodiversity",
+                                                LUH2_path = LUH2_path, out_path_area=out_path_area, path_intensity=path_intensity, out_path_biodiv=out_path_biodiv,CF_raster = CF_raster)
 
