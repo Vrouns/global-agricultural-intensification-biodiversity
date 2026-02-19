@@ -1,0 +1,3 @@
+To compile the intensification dataset, multiple codes were used, split by the dataset used and the land-use type. 
+First, we derived the plantation layer, using CROPGRIDS data and FAOSTAT data. 
+Then, we derived intensification based on parameters described in the publication. 
