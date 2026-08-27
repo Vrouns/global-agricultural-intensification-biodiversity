@@ -1,5 +1,5 @@
 # global-agricultural-intensification-biodiversity
-Code to quantify global biodiversity impacts of agricultural land-use intensification using crop-resolved, spatio-temporal data (2000–2019), available under https://doi.org/10.5281/zenodo.18221483
+Code to quantify global biodiversity impacts of agricultural land-use intensification using crop-resolved, spatio-temporal data (2000–2024)
 
 ---
 
