@@ -8,13 +8,13 @@ library(ggpubr)
 
 
 # Apply to your dataframe
-data <- read.csv("output/biodiversity_impact_assessment_2000-2019_LUH2_GCB2025.csv")
+data <- read.csv("output/biodiversity_impact_assessment_2000-2024_LUH2_GCB2025_rev1.csv")
 outp_path = "./output/figures/LUH2_GCB2025"
 data_croptypes <- data|>filter(!is.na(crop_type))
 
 ## for supplements table 
 data_sup <- data |>
-  filter(year == 2019)|>
+  filter(year == 2024)|>
   group_by(crop_type, crop_group, LU_type)|>
   summarize(impact_change = sum(impact_change, na.rm=T))|>
   select(crop_type, crop_group, LU_type)
@@ -25,7 +25,8 @@ data_sup <- data |>
 col_reg <- c(  "Brazil" =  "#900000", 
                "Peru" = "#ee2400",
                "Other South America" = "#FFB2B2",
-               "North America" =  "#4575b4",
+               "Guatemala" = "#5588ff",
+               "Other North America" =  "#9CC9EE",
                "Indonesia"="#762a83", 
                "China" = "#9970ab", 
                "Other Asia and Pacific" = "#c2a5cf", 
@@ -41,17 +42,19 @@ col_intensity = c(
 
 col_crops <- c(
   "bananas" = "#e3b505",                     # golden yellow
-  "leguminous crops" = "#A7BBEC",            # olive  
-  "maize" = "#8CD790",                       # medium purple 
+  "leguminous crops" = "#5B8E8A",            # olive  
+  "maize" = "#588157",                       # medium purple
+  "plantain" = "#AA7711",
   "oilpalm " = "#D81E5B",                     # deep red  
-  "other cereals" = "#9BDEAC",               # cyan-blue  
-  "other crops" = "#7f7f7f",                  # dark grey
+  "cocoa" = "#C47F45",
+  "other cereals" = "#8CD790",               # cyan-blue  
+  "other crops" = "#DCD4D0",                  # dark grey
   "other fruits and nuts" = "#FFA420",       # light yellow-beige  
   "other oilseed crops" = "#F0544F",         # light coral  
   "rice " = "#588157",                        # viol et  
   "soybeans" = "#BE6C77",                    # brown  
-  "sugar beverage and spice crops" = "#B3EBF2", # pink-magenta  
-  "vegetables, melons and root/tuber crops" = "#AD8A64" # neutral grey                 # dark grey
+  "sugar beverage and spice crops" = "#8E6C88", # pink-magenta  
+  "vegetables, melons and root/tuber crops" = "#7A9E3A" # neutral grey                 # dark grey
 )
 
 all_cols <- c(col_intensity, col_reg, col_crops)
@@ -60,18 +63,20 @@ all_cols <- c(col_intensity, col_reg, col_crops)
 # Figure croptypes over time 
 ##############################
 # crop order as in sankey (nach crop-groups geordnet)
-crop_order <- c("rice ",                   
-                "maize",                       
-                "other cereals", 
-                "soybeans" ,                   
-                "oilpalm ",                    
-                "other oilseed crops", 
-                "bananas",                   
-                "other fruits and nuts",       
-                "vegetables, melons and root/tuber crops",
-                "leguminous crops",          
-                "sugar beverage and spice crops",  
-                "other crops")
+crop_order <- c(      
+  "maize",                       
+  "other cereals", 
+  "soybeans" ,                   
+  "oilpalm ",                    
+  "other oilseed crops", 
+  "bananas",                   
+  "other fruits and nuts", 
+  "plantain",
+  "vegetables, melons and root/tuber crops",
+  "cocoa",
+  "sugar beverage and spice crops",  
+  "leguminous crops",
+  "other crops")
 
 # Panel 1 intensity -------------------------------------------------------
 change_int_data <- data_croptypes |>
@@ -99,11 +104,11 @@ plot_change_intensity_ab <- ggplot(change_int_data,
                     labels = function(x) paste0(toupper(substr(x, 1, 1)), tolower(substr(x, 2, nchar(x))))) +
   labs(x = NULL, y = expression("Global Potential Species Loss ("*Delta*" %PSL"["glo"]*") "), 
        fill=NULL)+
-  scale_y_continuous(limits = c(-0.23, 0.93)) +
+  scale_y_continuous(limits = c(-0.16,1.3)) +
 
   scale_x_continuous(
-    breaks = c(2001, 2005, 2010, 2015, 2019),   # only show these labels
-    expand = expansion(mult = c(0, 0))  # remove extra space at ends
+    breaks = c(2001, 2005, 2010, 2015, 2020,2024),   # only show these labels
+    expand = expansion(mult = c(0, 0.01))  # remove extra space at ends
   )+
   theme_minimal(base_size = 10) +  
   theme(
@@ -136,31 +141,28 @@ change_croptype <- change_croptype|>inner_join(change_ct_2000,
   mutate(change_rel = ((impact /impact_2000)*100), year.y = NULL)|>
   rename(year = "year.x")
 
-cropgroups_order <- c("oilpalm ","maize","rice ","bananas","soybeans",
-                      "vegetables, melons and root/tuber crops","other oilseed crops",
-                      "sugar beverage and spice crops",
-                      "other fruits and nuts","other crops","other cereals",
-                      "leguminous crops"
-                      )
+cropgroups_order <- crop_order
 
 plot_change_ct_ab <- ggplot(change_croptype, aes(x = year, y = impact_change*100, 
                                                  fill = factor(crop_group, levels = crop_order))) +
   geom_bar(stat = "identity", width = 0.7) +   # Outline für Abgrenzung
   #geom_area(stat = "identity")+
-  scale_fill_manual(values = col_crops, labels = c("Rice ",                   
-                                                   "Maize",                       
-                                                   "Other cereals", 
-                                                   "Soybeans" ,                   
-                                                   "Oilpalm ",                    
-                                                   "Other oilseed \ncrops", 
-                                                   "Bananas",                   
-                                                   "Other fruits & nuts",       
-                                                   "Vegetables, melons \n& root/tuber crops",
-                                                   "Leguminous crops",          
-                                                   "Sugar beverage \n& spice crops",  
-                                                   "Other crops") ) +
+  scale_fill_manual(values = col_crops,labels = c(                 
+    "Maize",                       
+    "Other cereals", 
+    "Soybeans" ,                   
+    "Oilpalm ",                    
+    "Other oilseed crops", 
+    "Bananas",                   
+    "Other fruits & nuts",
+    "Plantain",
+    "Vegetables, melons & \nroot/tuber crops",
+    "Cocoa",
+    "Sugar beverage \n& spice crops",
+    "Leguminous crops",          
+    "Other crops") ) +
   labs(x = NULL, y = NULL,fill=NULL)+
-  scale_y_continuous(limits = c(-0.23, 0.93)) +
+  scale_y_continuous(limits = c(-0.16, 1.3)) +
   theme_minimal(base_size = 10) +  
   theme(
     legend.text = element_text(size = 8),
@@ -170,8 +172,8 @@ plot_change_ct_ab <- ggplot(change_croptype, aes(x = year, y = impact_change*100
     axis.text.y = element_blank(),     # removes y-axis numbers
   )+
   scale_x_continuous(
-    breaks = c(2001, 2005, 2010, 2015, 2019),   # only show these labels
-    expand = expansion(mult = c(0, 0))) +
+    breaks = c(2001, 2005, 2010, 2015, 2020,2024),   # only show these labels
+    expand = expansion(mult = c(0, 0.01))) +
   guides(fill=guide_legend(ncol=2,title.position="top"))+
   geom_hline(yintercept = 0, linetype = "dashed", color = "black")   # Null-Linie klar sichtbar
 plot_change_ct_ab
@@ -181,18 +183,19 @@ plot_change_ct_rel <- ggplot(change_croptype, aes(x = year, y = change_rel,
                                                  col = factor(crop_group, levels = crop_order))) +
   geom_line() +   # Outline für Abgrenzung
   #geom_area(stat = "identity")+
-  scale_color_manual(values = col_crops, labels = c("rice ",                   
-                                                   "maize",                       
-                                                   "other cereals", 
-                                                   "soybeans" ,                   
-                                                   "oilpalm ",                    
-                                                   "other oilseed crops", 
-                                                   "bananas",                   
-                                                   "other fruits & nuts",       
-                                                   "vegetables, melons & \nroot/tuber crops",
-                                                   "leguminous crops",          
-                                                   "sugar beverage \n& spice crops",  
-                                                   "other crops") ) +
+  scale_color_manual(values = col_crops, labels = c(                 
+                                                   "Maize",                       
+                                                   "Other cereals", 
+                                                   "Soybeans" ,                   
+                                                   "Oilpalm ",                    
+                                                   "Other oilseed crops", 
+                                                   "Bananas",                   
+                                                   "Other fruits & nuts",
+                                                   "Plantain",
+                                                   "Vegetables, melons & \nroot/tuber crops",
+                                                   "Leguminous crops",          
+                                                   "Sugar beverage \n& spice crops",  
+                                                   "Other crops") ) +
   #labs(x = NULL, y = NULL,fill=NULL)+
   #scale_y_continuous(limits = c(-0.23, 0.87)) +
   theme_minimal(base_size = 10) +  
@@ -229,24 +232,18 @@ region_data <- region_data|>inner_join(region_data_2000,
 
 
 # for uniform plots always plot with same order
-country_order <- c("Brazil","Peru", "Other South America",
-                   "North America",
+country_order <- c("Brazil","Peru","Other South America",
+                   "Guatemala", "Other North America",
                    "Indonesia","Other Asia and Pacific", 
-                   "DR Congo", "Tanzania", "Other Africa", 
+                   "DR Congo", "Other Africa", 
                    "Europe")
-
-
 
 plot_change_reg_ab <- ggplot(region_data, aes(x = year,
                                               y = impact_change*100, fill = factor(country_group, levels = country_order))) +
   geom_bar(stat = "identity", width = 0.5) + 
-  scale_fill_manual(values= col_reg, labels = c("Brazil","Peru","Other South \nAmerica",
-                                                "North America", 
-                                                "Indonesia","Other Asia \nand Pacific", 
-                                                "DR Congo", "Tanzania", "Other Africa", 
-                                                 "Europe")) +
+  scale_fill_manual(values= col_reg, labels = label_wrap(20)) +
   labs(x = NULL, y = NULL, fill = NULL) +
-  scale_y_continuous(limits = c(-0.23, 0.93)) +
+  scale_y_continuous(limits = c(-0.16,1.3)) +
   theme_minimal(base_size = 10) +  
   theme(
     legend.text = element_text(size = 8),
@@ -258,7 +255,7 @@ plot_change_reg_ab <- ggplot(region_data, aes(x = year,
     # plot.margin = margin(3, -2, 3, 2)     # optional: removes tick marks
   )+
   scale_x_continuous(
-    breaks = c(2001, 2005, 2010, 2015, 2019),   # only show these labels
+    breaks = c(2001, 2005, 2010, 2015, 2020,2024),   # only show these labels
     expand = expansion(mult = c(0, 0.05)))+
   guides(fill=guide_legend(ncol=2,title.position="top"))+
   geom_hline(yintercept = 0, linetype = "dashed", color = "black")
@@ -281,7 +278,7 @@ legendC <- get_legend(plot_change_reg_ab)
 
 legends <- ggarrange(legendA, legendB, legendC, ncol = 3,align = "h")
 
-plots_stacked <- ggarrange(plots, legends, ncol = 1, heights = c(1,0.5))
+plots_stacked <- ggarrange(plots, legends, ncol = 1, heights = c(1,0.6))
 plots_stacked
 
 
@@ -294,8 +291,30 @@ ggsave("F06_TS_Int_croptypes_Reg.pdf",
        units = "mm",
        device = "pdf")
 
+#################################
+# for text
+# % stemming from high intensity, med and low agriculture: 
+int_2024 <- change_int_data |>
+  filter(year ==2024)
+sum(int_2024$impact_change)
 
+# top crops 
+change_croptype %>%
+  filter(year == 2024) %>%
+  group_by(crop_group)|>
+  summarise(total_change = sum(impact_change, na.rm = TRUE)*100, 
+            total_impact = sum(impact, na.rm=T)) %>%
+  arrange(desc(total_change)) %>%
+  slice_head(n = 8)# same for changes 
+# impact from oilpalm, maize, bananas
+(0.00266+0.0012+0.0011+0.000956)/sum(int_2024$impact_change)
 
-
-
-
+# regions 
+region_data %>%
+  filter(year == 2024) %>%
+  group_by(country_group)|>
+  summarise(total_change = sum(impact_change, na.rm = TRUE)*100, 
+            total_impact = sum(impact, na.rm=T)) %>%
+  arrange(desc(total_change)) %>%
+  slice_head(n = 8)# same for changes 
+# impact from oilpalm, maize, bananas

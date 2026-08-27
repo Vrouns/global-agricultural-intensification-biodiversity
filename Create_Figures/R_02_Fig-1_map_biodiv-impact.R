@@ -4,8 +4,11 @@
 
 # Compile Figure 3: Map of biodiversity Impacts 
 # 1. 2000 
-# 2. 2019
+# 2. 2024
 # 3. Change map 
+ 
+# do something 
+
 
 library(terra)
 library(ggplot2)
@@ -21,7 +24,7 @@ library(sf)
 
 dataset_base = "LUH2_GCB2025" # either LUH2_GCB2025 or  LUH2
 
-path_biodiv <- file.path("output/biodiversity_impact_assessment", dataset_base)
+path_biodiv <- file.path("output/biodiversity_impact_assessment/LUH2_GCB2025_revision/")
 shpcountries <- vect('H:/02_Projekte/allgemein_biodiversity_impact/02_data/country_shp/ne_110m_admin_0_countries.shp')
 eckertcrs <- "ESRI:54012"
 shpcountries_proj <- project(shpcountries, eckertcrs)
@@ -33,121 +36,128 @@ if (!dir.exists(fig_path)) {
   dir.create(fig_path, recursive = TRUE)
 }
 
-lu_types <- c("crops","pasture","plantations", "rangeland","abandoned")
-
-y1 <- 2000 # year one 
-y2 <- 2019
-org_rast_list <- list()
-rast_list <- list()
-plot_list <- list()
-lu_type <- lu_types[1]
-# loop over land use types 
-for (lu_type in lu_types){
-  # read data into list 
-  for (y in c(y1,y2)){
-    
-    filename <- paste0(lu_type,"_impact_",y,".tif")
-    
-    org_rast_list[[as.character(y)]][[lu_type]] <- rast(file.path(path_biodiv,lu_type,
-                                                            filename))
-    
-    org_rast_list[[as.character(y)]][[lu_type]] <- sum(org_rast_list[[as.character(y)]][[lu_type]],
-                                                    na.rm=T)
-    # project to eckert resolution 
-    # resample raster to eckert IV projection
-    
-    rast_list[[as.character(y)]][[lu_type]]<- org_rast_list[[as.character(y)]][[lu_type]]/ cellSize(org_rast_list[[as.character(y)]][[lu_type]])
-    
-    rast_list[[as.character(y)]][[lu_type]] <- project(rast_list[[as.character(y)]][[lu_type]],
-                                                       eckertcrs, method = "bilinear")
-    
-    rast_list[[as.character(y)]][[lu_type]] <- rast_list[[as.character(y)]][[lu_type]] * cellSize(rast_list[[as.character(y)]][[lu_type]])
-    
-  }
-  
-}
-
-y2_rast <- rast(rast_list[[as.character(y2)]])
-y2_rast_no_ab <- y2_rast[[-5]]
-
-# for plotting only one year: 
-y2_sum <- sum(y2_rast_no_ab, na.rm=T)
-
-# remove the non-land-pixels 
-y2_sum_land <- mask(y2_sum,shpcountries_proj)
-plot(y2_sum_land)
-# Figure 2019 -------------------------------------------------------------
-# prepare for plotting 
-df_sum_y2 <- as.data.frame(y2_sum_land , xy = TRUE)
-
-# cut out antarctica and north pole (no impacts anyway)
-df_sum_y2_no_poles <- df_sum_y2 %>%
-  filter(y > -7000000)  # remove all latitudes below -60°
-# plot
-
-# pseudo-log-scale 
-# Create a new fill variable
-df_sum_y2_no_poles <- df_sum_y2_no_poles %>%
-  mutate(fill_val = case_when(
-    sum == 0 ~ -1,      # placeholder for zero values
-    TRUE ~ sum
-  ))
-
-# define nice breaks for pseudo-log scale
-summary(df_sum_y2$sum)
-
-breaks<- (c(max(df_sum_y2$sum),1e-8,1e-9, 1e-10,1e-11,1e-12,0))
-
-y2_plot <- ggplot(df_sum_y2_no_poles, aes(x, y, fill = sum)) +
-  geom_tile(color = NA) +
-  scale_fill_gradientn(
-    colours = c("lightgrey", viridis(256, option = "magma", direction = -1)),
-    trans = pseudo_log_trans(sigma = 1e-12),
-    na.value = "white",
-    name = "PSLglo",
-    breaks=breaks
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    panel.grid = element_blank(),
-    axis.title = element_blank(),
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    legend.position = "right",
-    legend.title = element_text(size = 10),
-    legend.text = element_text(size = 10),
-    legend.key.height = unit(1.5, "cm")  # increase height
-  )
-y2_plot
-
-# ggsave("Biodiversity_impact_2019.pdf",
+# lu_types <- c("crops","pasture","plantations", "rangeland","abandoned")
+# 
+# y1 <- 2000 # year one 
+# y2 <- 2024
+# org_rast_list <- list()
+# rast_list <- list()
+# plot_list <- list()
+# lu_type <- lu_types[1]
+# # loop over land use types
+# for (lu_type in lu_types){
+#   # read data into list
+#   for (y in c(y1,y2)){
+# 
+#     filename <- paste0(lu_type,"_impact_",y,".tif")
+# 
+#     org_rast_list[[as.character(y)]][[lu_type]] <- rast(file.path(path_biodiv,lu_type,
+#                                                             filename))
+# 
+#     org_rast_list[[as.character(y)]][[lu_type]] <- sum(org_rast_list[[as.character(y)]][[lu_type]],
+#                                                     na.rm=T)
+#     # project to eckert resolution
+#     # resample raster to eckert IV projection
+# 
+#     rast_list[[as.character(y)]][[lu_type]]<- org_rast_list[[as.character(y)]][[lu_type]]/ cellSize(org_rast_list[[as.character(y)]][[lu_type]])
+# 
+#     rast_list[[as.character(y)]][[lu_type]] <- project(rast_list[[as.character(y)]][[lu_type]],
+#                                                        eckertcrs, method = "bilinear")
+# 
+#     rast_list[[as.character(y)]][[lu_type]] <- rast_list[[as.character(y)]][[lu_type]] * cellSize(rast_list[[as.character(y)]][[lu_type]])
+# 
+#   }
+# 
+# }
+# 
+# y2_rast <- rast(rast_list[[as.character(y2)]])
+# y2_rast_no_ab <- y2_rast[[-5]]
+# 
+# # for plotting only one year:
+# y2_sum <- sum(y2_rast_no_ab, na.rm=T)
+# 
+# # remove the non-land-pixels
+# y2_sum_land <- mask(y2_sum,shpcountries_proj)
+# plot(y2_sum_land)
+# # Figure 2019 -------------------------------------------------------------
+# # prepare for plotting
+# df_sum_y2 <- as.data.frame(y2_sum_land , xy = TRUE)
+# 
+# # cut out antarctica and north pole (no impacts anyway)
+# df_sum_y2_no_poles <- df_sum_y2 %>%
+#   filter(y > -7000000)  # remove all latitudes below -60°
+# # plot
+# 
+# # pseudo-log-scale
+# # Create a new fill variable
+# df_sum_y2_no_poles <- df_sum_y2_no_poles %>%
+#   mutate(fill_val = case_when(
+#     sum == 0 ~ -1,      # placeholder for zero values
+#     TRUE ~ sum
+#   ))
+# 
+# # define nice breaks for pseudo-log scale
+# summary(df_sum_y2$sum)
+# 
+# breaks<- (c(max(df_sum_y2$sum),1e-8,1e-9, 1e-10,1e-11,1e-12,0))
+# 
+# y2_plot <- ggplot(df_sum_y2_no_poles, aes(x, y, fill = sum)) +
+#   geom_tile(color = NA) +
+#   scale_fill_gradientn(
+#     colours = c("lightgrey", viridis(256, option = "magma", direction = -1)),
+#     trans = pseudo_log_trans(sigma = 1e-12),
+#     na.value = "white",
+#     name = "PSLglo",
+#     breaks=breaks
+#   ) +
+#   theme_minimal(base_size = 12) +
+#   theme(
+#     panel.grid = element_blank(),
+#     axis.title = element_blank(),
+#     axis.text = element_blank(),
+#     axis.ticks = element_blank(),
+#     legend.position = "right",
+#     legend.title = element_text(size = 10),
+#     legend.text = element_text(size = 10),
+#     legend.key.height = unit(1.5, "cm")  # increase height
+#   )
+# y2_plot
+# 
+# ggsave("Biodiversity_impact_2024.pdf",
 #        plot = y2_plot,
 #        path = fig_path,
 #        width = 9.16,
 #        height = 4.05,
 #        units = "in",
 #        device = "pdf")
-# ggsave("output/figures/Biodiversity_impact_2019.jpg", width = 19, height = 8, units = "cm")
+# ggsave("output/figures/Biodiversity_impact_2024.jpg", width = 19, height = 8, units = "cm")
+# 
+# 
+# 
+# # Figure change 2000-2024-------------------------------------------------
+# # abandoned land included in the changes
+# 
+# y1_rast <- rast(rast_list[[as.character(y1)]])
+# y1_sum <- sum(y1_rast, na.rm=T)
+# y2_sum <- sum(y2_rast, na.rm=T)
+# y1y2 <- y2_sum - y1_sum
+# 
+# # get number of total impact
+# global(y1y2, fun = "sum", na.rm = TRUE)
+# 
+# # remove the non-land-pixels
+# y1y2_sum_land <- mask(y1y2,shpcountries_proj)
+# # get number of total impact
+# global(y1y2_sum_land, fun = "sum", na.rm = TRUE)*1e4
+# 
+# # write Raster for later reproduction
+# writeRaster(y1y2_sum_land, paste0("output/figures/Fig2_data/biodiv_change_2000-2024_", dataset_base,".tif"))
 
 
+####################
+# for direct plotting: 
 
-# Figure change 2000-2019 -------------------------------------------------
-# abandoned land included in the changes
-
-y1_rast <- rast(rast_list[[as.character(y1)]])
-y1_sum <- sum(y1_rast, na.rm=T)
-y2_sum <- sum(y2_rast, na.rm=T)
-y1y2 <- y2_sum - y1_sum
-
-# get number of total impact 
-global(y1y2, fun = "sum", na.rm = TRUE)
-
-# remove the non-land-pixels 
-y1y2_sum_land <- mask(y1y2,shpcountries_proj)
-
-# write Raster for later reproduction 
-writeRaster(y1y2_sum_land, paste0("output/figures/Fig2_data/biodiv_change_2000-2019_", dataset_base,".tif"))
-
+y1y2_sum_land <- rast(paste0("output/figures/Fig2_data/biodiv_change_2000-2024_", dataset_base,".tif"))
 # prepare for plotting 
 df_y1y2 <- as.data.frame(y1y2_sum_land , xy = TRUE)
 
@@ -224,7 +234,7 @@ y1y2_plot <- ggplot(df_y1y2_no_poles, aes(x, y, fill = sum)) +
     trans = pseudo_log_trans(sigma = 1e-14),
     name = expression(Delta*PSL["glo"]), 
     breaks = breaks
-  )+  
+  )+
   geom_rect(
     data = bbox_df,
     inherit.aes = FALSE,  # important so it doesn’t try to map x/y
@@ -264,7 +274,7 @@ y1y2_plot <- ggplot(df_y1y2_no_poles, aes(x, y, fill = sum)) +
     hjust = 0, vjust = 1,   # align text
     size = 4,
     fontface = "bold")+
-  
+
   guides(
     fill = guide_colorbar(
       title.vjust = 1,
@@ -289,6 +299,49 @@ y1y2_plot <- ggplot(df_y1y2_no_poles, aes(x, y, fill = sum)) +
   )
 
 y1y2_plot
+
+## for graphical abstract
+y1y2_plot_GA <- ggplot(df_y1y2_no_poles, aes(x, y, fill = sum)) +
+  geom_tile(color = NA) +
+  scale_fill_gradientn(
+    colors = coolwarm_hcl,
+    na.value = "white",
+    trans = pseudo_log_trans(sigma = 1e-14),
+    name = NULL, 
+    breaks = breaks
+  )+  
+  guides(
+    fill = guide_colorbar(
+      title.vjust = 1,
+      title.hjust = 0.5# center title horizontally
+    )
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(
+    panel.grid = element_blank(),
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    legend.position = "left",
+    legend.direction = "vertical",
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 1),
+    legend.key.height = unit(1.5, "cm"),  # increase height
+    legend.key.width = unit(0.3, "cm"),
+    legend.box.spacing = unit(-5, "cm"),
+    plot.margin = margin(b = -10, t = -1)
+    #legend.margin = margin(t = -13)   # negative top margin pulls legend up
+  )
+
+y1y2_plot_GA
+
+ggsave("GA_F01_map_biodiv_change_2000-2019.tif",
+       plot = y1y2_plot_GA,
+       path = fig_path,
+       width = 200,
+       height = 148,
+       units = "mm",
+       device = "tif")
 
 
 ###################### 
@@ -356,12 +409,28 @@ final_plot <-plot_grid(
 final_plot
 outp_path = fig_path
 
-# size is approximately A5 
-ggsave("F01_map_biodiv_change_2000-2019.pdf",
+# size is approximately A5
+ggsave("F01_map_biodiv_change_2000-2024.pdf",
        plot = final_plot,
        path = outp_path,
-       width = 200,  
+       width = 200,
        height = 148,
        units = "mm",
        device = "pdf")
 
+
+# ggsave("F01_map_biodiv_change_2000-2019.svg",
+#        plot = final_plot,
+#        path = outp_path,
+#        width = 200,  
+#        height = 148,
+#        units = "mm",
+#        device = "svg")
+
+ggsave("F01_map_biodiv_change_2000-2024.tif",
+       plot = final_plot,
+       path = outp_path,
+       width = 200,
+       height = 148,
+       units = "mm",
+       device = "tif")

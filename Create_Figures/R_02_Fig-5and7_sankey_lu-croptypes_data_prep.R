@@ -12,13 +12,16 @@
 library(dplyr)
 library(openxlsx)
 
-df <- read.csv("output/biodiversity_impact_assessment_2000-2019_LUH2_GCB2025.csv")
+df <- read.csv("output/biodiversity_impact_assessment_2000-2024_LUH2_GCB2025_rev1.csv")
 
 # add country group 
 df <- df |>
   filter(!is.na(country_group))
 
-df$intensity[is.na(df$intensity)] <- "Abandoned"
+unique(df$LU_type)
+# replace intensity value for abandoned land with "Abandoned" 
+
+df$intensity[df$LU_type == "Abandoned"] <- "Abandoned"
 # change rangeland to pasture light 
 #unique(df$LU_type)
 #df$lu_typ#df$lu_type[df$lu_type == "Rangeland"] <- "Pasture"
@@ -26,9 +29,9 @@ df_code <- df
 
 # order of country group 
 country_order <- c("Brazil","Peru","Other South America",
-                   "North America",
+                   "Guatemala", "Other North America",
                    "Indonesia","Other Asia and Pacific", 
-                   "DR Congo", "Tanzania", "Other Africa", 
+                   "DR Congo", "Other Africa", 
                    "Europe")
 
 
@@ -64,7 +67,7 @@ writeData(wb, "data_sankey_all_years", data_sankey)
 
 # safe only change 
 data_sankey_change <- data_sankey |>
-  filter(year == 2019)|>
+  filter(year == 2024)|>
   group_by(country_group, intensity, lu_type)|>
   summarize(impact_change = sum(impact_change, na.rm=T))|>
   select(country_group, intensity, lu_type, impact_change)
@@ -122,21 +125,22 @@ saveWorkbook(wb, paste0(out_dir,"sankey_data_lu.xlsx"), overwrite = TRUE)
 # croptypes 
 ########################
 
-unique(df$crop_type)
 # top croptypes (most changes in pdf)
 
 # assign crop order 
-crop_order <- c("rice ",                   
+crop_order <- c(      
                 "maize",                       
                 "other cereals", 
                 "soybeans" ,                   
                 "oilpalm ",                    
                 "other oilseed crops", 
                 "bananas",                   
-                "other fruits and nuts",       
+                "other fruits and nuts", 
+                "plantain",
                 "vegetables, melons and root/tuber crops",
-                "leguminous crops",          
+                "cocoa",
                 "sugar beverage and spice crops",  
+                "leguminous crops",
                 "other crops")
 
 
@@ -185,7 +189,8 @@ intensity_key <- tibble(
 
 ct_type_key <- df %>%
   distinct(crop_group) %>%
-  mutate(lu_key = as.numeric(factor(crop_group, levels = crop_order)))
+  mutate(lu_key = as.numeric(factor(crop_group, levels = crop_order)))%>%
+  filter(!is.na(lu_key))
 
 country_key <- df %>%
   distinct(country_group) %>%
@@ -211,3 +216,4 @@ writeData(wb, "country_key", country_key)
 
 # Save Excel file
 saveWorkbook(wb, "./output/figures/LUH2_GCB2025/sankeys/sankey_data/sankey_data_crops.xlsx", overwrite = TRUE)
+

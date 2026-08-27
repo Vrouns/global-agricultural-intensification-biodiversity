@@ -10,15 +10,15 @@ library(scales)
 library(dplyr)
 library(ggspatial)    
 
-dataset_used <- "LUH2_GCB2025"
+dataset_used <- "LUH2_GCB2025_revision"
 # load data ---------------------------------------------------------------
 # total impacts of plantations in 2019 split by intensity 
-plantation_impacts_2019 <- rast(paste0("output/biodiversity_impact_assessment/",dataset_used,"/plantations/plantations_impact_2019.tif"))
+plantation_impacts_2024 <- rast(paste0("output/biodiversity_impact_assessment/",dataset_used,"/plantations/plantations_impact_2024.tif"))
 plantation_impacts_2000 <- rast(paste0("output/biodiversity_impact_assessment/",dataset_used,"/plantations/plantations_impact_2000.tif"))
 
 # select only medium plantations since here impacts occured 
-plantation_impacts_2019_sum <- plantation_impacts_2019$plantations_impact_2019_2
-plantation_impacts_2019_sum[is.na(plantation_impacts_2019_sum)] <- 0
+plantation_impacts_2024_sum <- plantation_impacts_2024$plantations_impact_2024_2
+plantation_impacts_2024_sum[is.na(plantation_impacts_2024_sum)] <- 0
 
 plantation_impacts_2000_sum <- plantation_impacts_2000$plantations_impact_2000_2
 plantation_impacts_2000_sum[is.na(plantation_impacts_2000_sum)] <- 0
@@ -33,13 +33,14 @@ shp_Congo <- shpcountries[shpcountries$SOVEREIGNT== "Democratic Republic of the 
 shp_Congo_org <- shp_Congo
 
 # Distribution of medium intensity bananas 
-med_plant_2019 <- rast(paste0("data/05_crop_types/CG/",dataset_used,"/crop_types_int/plantations_med_2019.tif"))
+med_plant_2024 <- rast(paste0("data/05_crop_types/CG/",dataset_used,"/crop_types_int/plantations_med_2024.tif"))
 med_plant_2000 <- rast(paste0("data/05_crop_types/CG/",dataset_used,"/crop_types_int/plantations_med_2000.tif"))
 
 # in share 
-med_plant_2019_share <- rast(paste0("data/05_crop_types/CG/",dataset_used,"/crop_types_int/crop_types_share/plantations_med_share_2019.tif"))
+med_plant_2024_share <- rast(paste0("data/05_crop_types/CG/",dataset_used,
+                                    "/crop_types_int/crop_types_share/plantations_med_share_2024.tif"))
 med_plant_2000_share <- rast(paste0("data/05_crop_types/CG/",dataset_used,"/crop_types_int/crop_types_share/plantations_med_share_2000.tif"))
-med_plant_2019_share[is.na(med_plant_2019_share)] <- 0
+med_plant_2024_share[is.na(med_plant_2024_share)] <- 0
 med_plant_2000_share[is.na(med_plant_2000_share)] <- 0
 
 # Crop data to Congo shape ------------------------------------------------
@@ -49,30 +50,30 @@ shp_Congo <- ext(shp_Congo)*1.05
 CF_DRC <- crop(CFs_plant_med, shp_Congo, mask =T)
 
 ## medium intense banana share 
-DRC_share_plant_med_ban_2019 <- crop(med_plant_2019_share$banana, shp_Congo, mask=T)
+DRC_share_plant_med_ban_2024 <- crop(med_plant_2024_share$banana, shp_Congo, mask=T)
 DRC_share_plant_med_ban_2000 <- crop(med_plant_2000_share$banana, shp_Congo, mask=T)
 
 # Calculate Impact --------------------------------------------------------
 # result of bananas should be 55% of total impact change in Congo
 ## Impact 
 # Total impact 
-plantation_impact_2019_DRC <- crop(plantation_impacts_2019_sum, shp_Congo, mask =T)
+plantation_impact_2024_DRC <- crop(plantation_impacts_2024_sum, shp_Congo, mask =T)
 plantation_impact_2000_DRC <- crop(plantation_impacts_2000_sum, shp_Congo, mask =T)
-plantation_impact_change <- plantation_impact_2019_DRC-plantation_impact_2000_DRC
+plantation_impact_change <- plantation_impact_2024_DRC-plantation_impact_2000_DRC
 
 global(plantation_impact_change, na.rm=T, fun = "sum")
 
 # assess with share
-impact_share_ban_2019 <- plantation_impact_2019_DRC * DRC_share_plant_med_ban_2019
-impact_share_ban_2019[is.na(impact_share_ban_2019)] <- 0
+impact_share_ban_2024 <- plantation_impact_2024_DRC * DRC_share_plant_med_ban_2024
+impact_share_ban_2024[is.na(impact_share_ban_2024)] <- 0
 
 impact_share_ban_2000 <- plantation_impact_2000_DRC * DRC_share_plant_med_ban_2000
 impact_share_ban_2000[is.na(impact_share_ban_2000)] <- 0
 
-impact_change_ban_2 <- impact_share_ban_2019 - impact_share_ban_2000
+impact_change_ban_2 <- impact_share_ban_2024 - impact_share_ban_2000
 
 global(impact_change_ban_2, fun = "sum")  
-global(impact_share_ban_2019, fun = "sum") - global(impact_share_ban_2000, fun = "sum")
+global(impact_share_ban_2024, fun = "sum") - global(impact_share_ban_2000, fun = "sum")
 
 # Plot impact share bananas  ----------------------------------------------
 plot(impact_change_ban_2)
@@ -102,11 +103,11 @@ coolwarm_hcl <-   c("#002F70","#1A4F97",
 breaks = c(-1e-9, -1e-8, -1e-7, 0, 1e-7, 1e-8, 1e-9)
 
 drc <- rnaturalearth::ne_countries(scale = "medium", country = "Democratic Republic of the Congo", returnclass = "sf")
-lim <- max(abs(df_impact_crop$plantations_impact_2019_2), na.rm = TRUE)
+lim <- max(abs(df_impact_crop$plantations_impact_2024_2), na.rm = TRUE)
 
 ggplot() +
   #geom_tile(color = NA) +
-  geom_raster(data = df_impact_crop, aes(x, y, fill =  plantations_impact_2019_2))+
+  geom_raster(data = df_impact_crop, aes(x, y, fill =  plantations_impact_2024_2))+
   geom_sf(data = drc, fill = NA, color = "grey40", linewidth = 0.4) +
   scale_fill_gradientn(
     colors = coolwarm_hcl,

@@ -18,7 +18,7 @@ dataset_base = "LUH2_GCB2025" # either LUH2_GCB2025 or  LUH2
 
 fig_path <- file.path("./output/figures/", dataset_base)
 lu_types <- c("crops","pasture","plantations", "rangeland","abandoned")
-path_biodiv <- file.path("./output/biodiversity_impact_assessment", dataset_base)
+path_biodiv <- file.path("output/biodiversity_impact_assessment/LUH2_GCB2025_revision/")
 shpcountries <- vect('H:/02_Projekte/allgemein_biodiversity_impact/02_data/country_shp/ne_110m_admin_0_countries.shp')
 outpath = file.path("./output/figures/", dataset_base)
 
@@ -32,7 +32,7 @@ hotspots <- vect("./output/figures/Fig2_data/hotspot_shp.shp")
 
 
 y1 <- 2000 # year one 
-y2 <- 2019
+y2 <- 2024
 org_rast_list <- list()
 rast_list <- list()
 plot_list <- list()
@@ -83,14 +83,14 @@ biodiv_int <- c(sum(low, na.rm=T),
                 sum(high, na.rm=T),
                 change_list$abandoned)
 
-# write 2000 and 2019 seperately
+# write 2000 and 2024 seperately
 y2000 <- rast(c(rast_list[["2000"]]))
 y2000_tot <- sum(global(y2000, fun = "sum", na.rm = T))*1e6
 
-y2019 <- rast(c(rast_list[["2019"]]))
-y2019_tot <-sum(global(y2019, fun = "sum", na.rm = T))*1e6
+y2024 <- rast(c(rast_list[["2024"]]))
+y2024_tot <-sum(global(y2024, fun = "sum", na.rm = T))*1e6
 
-diff_tot <- y2019_tot - y2000_tot
+diff_tot <- y2024_tot - y2000_tot
 
 # mask out ocean
 shpcountries <- crop(shpcountries, safe_extent)
@@ -113,12 +113,12 @@ writeRaster(biodiv_int, filename = paste0(output_folder,"/data_change_int.tif"),
 
 writeRaster(y2000, filename = paste0(output_folder,"/data_2000.tif"),
             overwrite =T)
-writeRaster(y2019, filename = paste0(output_folder,"/data_2019.tif"),overwrite=T)
+writeRaster(y2024, filename = paste0(output_folder,"/data_2024.tif"),overwrite=T)
 ############################
 # Plotting 
 ############################
 
-biodiv_int_land <- rast("output/figures/LUH2_GCB2025/data_change_int.tif")
+biodiv_int_land <- rast("output/figures/LUH2_GCB2025/data_change_int_land.tif")
 # plot(biodiv_int_land)
 df_biodiv_int <- as.data.frame(biodiv_int_land , xy = TRUE)
 colnames(df_biodiv_int) <- c("x","y","low","medium","high","abandoned")
@@ -250,11 +250,6 @@ y1y2_plot <- ggplot(df_long, aes(x, y, fill = impact_change)) +
     )
 y1y2_plot
 
-#######################
-# barplot 
-
-
-#######################
 
 ggsave("F02_map_biodiversity.pdf",
        plot = y1y2_plot,

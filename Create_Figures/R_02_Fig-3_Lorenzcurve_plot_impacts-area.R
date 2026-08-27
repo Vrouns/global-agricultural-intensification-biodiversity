@@ -7,9 +7,9 @@ dataset_base = "LUH2_GCB2025"
 
 ### Produce figure of cumulated impact per area 
 if (dataset_base == "LUH2_GCB2025"){
-  data_raster <- rast("./output/figures/Fig2_data/biodiv_change_2000-2019_LUH2_GCB2025.tif")
+  data_raster <- rast("./output/figures/Fig2_data/biodiv_change_2000-2024_LUH2_GCB2025.tif")
 } else {
-  data_raster <- rast("./output/figures/Fig2_data/biodiversity_change_2000-2019.tif")
+  data_raster <- rast("./output/figures/Fig2_data/biodiversity_change_2000-2024.tif")
 }
 
 # Compute pixel areas in km²
@@ -37,6 +37,8 @@ data_vals_neg[data_vals_neg > 0] <- 0
 data_vals_neg <- abs(data_vals_neg)
 total_impact_sum_neg <- sum(data_vals_neg)
 
+# fraction increases decreases 
+total_impact_sum_pos / total_impact_sum_neg
 # Order by impact
 ord <- order(data_vals_pos, decreasing = TRUE)
 data_sorted <- data_vals_pos[ord]
@@ -296,6 +298,12 @@ ggsave(plot = int_plot, filename= "output/figures/LUH2_GCB2025/F03_Lorenz_Total_
        units = "in",
        device = "pdf")
 
+ggsave(plot = int_plot, filename= "output/figures/LUH2_GCB2025/F03_Lorenz_Total_int_inc-dec.tif",
+       width = 8.0,
+       height = 3.5,
+       units = "in",
+       device = "tif")
+
 sum_all <- sum(values(data_raster), na.rm = TRUE)
 
 sums <- 0
@@ -312,7 +320,7 @@ data_raster_land <- mask(data_raster, shpcountries_proj)
 
 impact_vals <- values(data_raster_land, na.rm=TRUE)
 impact_vals[impact_vals < 0] <- 0
-top10_threshold <- quantile(impact_vals, 0.95)
+top10_threshold <- quantile(impact_vals, 0.9)
 
 # Create hotspot raster
 hotspots <- classify(data_raster_land, rcl = matrix(c(-Inf, top10_threshold, 0,
@@ -326,7 +334,7 @@ colnames(hotspot_df)[3] <- "hotspot"
 ggplot(hotspot_df, aes(x = x, y = y)) +
   geom_tile(aes(fill = factor(hotspot))) +   # make hotspot discrete
   scale_fill_manual(values = c("0" = "lightgrey", "1" = "darkred"),
-                    labels = c("0" = "No hotspot", "1" = "Top 5 % Hotspot"),
+                    labels = c("0" = "No hotspot", "1" = "Top 10 % Hotspot"),
                     name = "") +
   labs(#title = "Increasing biodiversity impact hotspots", 
        x= "", y="") +
@@ -335,4 +343,4 @@ ggplot(hotspot_df, aes(x = x, y = y)) +
 
 # ggsave("output/figures/hotspotmap.pdf", width = 19, height = 10, units = "cm")
 # ggsave("output/figures/LUH2_GCB2025/hotspotmap_top10.jpg", width = 19, height = 8, units = "cm")
-ggsave("output/figures/LUH2_GCB2025/hotspotmap_top5.jpg", width = 19, height = 8, units = "cm")
+ggsave("output/figures/LUH2_GCB2025/hotspotmap_top10.jpg", width = 19, height = 8, units = "cm")

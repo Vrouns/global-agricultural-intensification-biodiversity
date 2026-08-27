@@ -19,9 +19,11 @@ library(stringr)
 
 dataset_used <- "LUH2_GCB2025"
 fig_path = file.path("output","figures",dataset_used)
+
+if (!dir.exists(fig_path)){dir.create(fig_path)}
 # load data
 if (dataset_used == "LUH2_GCB2025"){
-  data <- read.csv("./output/biodiversity_impact_assessment_2000-2019_LUH2_GCB2025.csv")
+  data <- read.csv("./output/biodiversity_impact_assessment_2000-2024_LUH2_GCB2025_rev1.csv")
 } else {
   data <- read.csv("./output/biodiversity_impact_assessment_2000-2019.csv")
 }
@@ -40,7 +42,7 @@ data_type <- data |>
 
 ## for supplements table 
 data_sup <- data_type |>
-  filter(year == 2019)|>
+  filter(year == 2024)|>
   group_by(country, country_group)|>
   summarize(impact_change = sum(impact_change, na.rm=T))|>
   select(country, country_group)
@@ -61,8 +63,8 @@ cols <- c(
   "Brazil" =  "#900000", 
   "Peru" = "#ee2400",
   "Other South America" = "#FFB2B2",
-  "Mexico" = "#74add1",
-  "North America" =  "#4575b4",
+  "Guatemala" = "#5588ff",
+  "Other North America" =  "#9CC9EE",
   "Indonesia"="#762a83", 
   "China" = "#9970ab", 
   "Other Asia and Pacific" = "#c2a5cf", 
@@ -145,10 +147,10 @@ plot_change_intensity_ab <- ggplot(change_int_data,
   labs(x = NULL, 
        y = expression("Global Potential Species Loss ("*Delta*" %PSL"["glo"]*")"),
        fill=NULL)+
-  scale_y_continuous(limits = c(-0.4, 1.7),expand = c(0, 0)) +
+  scale_y_continuous(limits = c(-0.4, 1.9),expand = c(0, 0)) +
   scale_x_continuous(
-    breaks = c(2001, 2005, 2010, 2015, 2019),   # only show these labels
-    expand = expansion(mult = c(0, 0)))+
+    breaks = c(2001, 2005, 2010, 2015, 2020,2024),   # only show these labels
+    expand = expansion(mult = c(0, 0.03)))+
   theme_minimal(base_size = 10) +  
   theme(
     legend.text = element_text(size = 8),
@@ -207,9 +209,9 @@ plot_change_lu_ab <- ggplot(change_lu_data,
   geom_bar(stat = "identity", width = 0.7) +   # Outline für Abgrenzung
   scale_fill_manual(values = cols) +
   labs(x = NULL, y = NULL,fill=NULL)+
-  scale_y_continuous(limits = c(-0.4, 1.7), expand = c(0,0)) +
+  scale_y_continuous(limits = c(-0.4, 1.9), expand = c(0,0)) +
   scale_x_continuous(
-    breaks = c(2001, 2005, 2010, 2015, 2019),   # only show these labels
+    breaks = c(2001, 2005, 2010, 2015, 2020,2024),   # only show these labels
     expand = expansion(mult = c(0, 0.03)))+
   theme_minimal(base_size = 10) +  
   theme(
@@ -265,7 +267,7 @@ region_data <- region_data|>inner_join(region_data_2000,
 
 # Order countries by total height
 country_order <- region_data %>%
-  filter(year == 2019) |>
+  filter(year == 2024) |>
   group_by(country_group) %>%
   summarise(total = sum(impact_change)) %>%
   arrange(desc(total)) %>%
@@ -273,7 +275,7 @@ country_order <- region_data %>%
 
 # order always by same order (region-wise)
 country_order <- c("Brazil","Peru","Other South America", 
-                    "North America",
+                    "Guatemala", "Other North America",
                    "Indonesia","Other Asia and Pacific", 
                    "DR Congo", "Tanzania", "Other Africa", 
                      "Europe")
@@ -282,7 +284,8 @@ plot_reg_ts <- ggplot(region_data, aes(x = year,
                                        y = impact, fill = factor(country_group, levels = country_order))) +
   geom_bar(stat = "identity", width = 0.5) + 
   scale_fill_manual(values = cols, guide ="none") +
-  labs(x = NULL, y = expression(Delta*"PSL"["glo"])) +
+  labs(x = NULL, y = expression(Delta*"PSL"["glo"])
+       ) +
   theme_minimal(base_size = 10) +
   #theme(legend.position = "none")+
   geom_hline(yintercept = 0, linetype = "dashed", color = "black")
@@ -292,11 +295,12 @@ plot_reg_ts
 plot_change_reg_ab <- ggplot(region_data, aes(x = year,
                     y = impact_change*100, fill = factor(country_group, levels = country_order))) +
   geom_bar(stat = "identity", width = 0.5) + 
-  scale_fill_manual(values= cols) +
+  scale_fill_manual(values= cols,
+                    labels = label_wrap(20)) +
   labs(x = NULL, y = NULL, fill = NULL) +
-  scale_y_continuous(limits = c(-0.4, 1.7), expand = c(0,0)) +
+  scale_y_continuous(limits = c(-0.4, 1.9), expand = c(0,0)) +
   scale_x_continuous(
-    breaks = c(2001, 2005, 2010, 2015, 2019),   # only show these labels
+    breaks = c(2001, 2005, 2010, 2015, 2020,2024),   # only show these labels
     expand = expansion(mult = c(0, 0.03)))+
   theme_minimal(base_size = 10) +  
   theme(
@@ -362,6 +366,13 @@ ggsave("F04_TS_Int_Lu_Reg.pdf",
        units = "mm",
        device = "pdf")
 
+ggsave("F04_TS_Int_Lu_Reg.tif",
+       plot = plots_stacked,
+       path = outp_path,
+       width = 180,  
+       height = 115,
+       units = "mm",
+       device = "tif")
 
 # Additional analysis (no figures but in text) ----------------------------
 #
@@ -377,7 +388,7 @@ lu_int_data_2000 <- lu_int_data|>
   select(c(LU_type, impact_2000))
 
 lu_int_data <- lu_int_data|>inner_join(lu_int_data_2000,
-                                             by = c("lu_type", "intensity"))|>
+                                             by = c("LU_type", "intensity"))|>
   mutate(change_rel = ((impact /impact_2000)*100), year.y = NULL)|>
   rename(year = "year.x")
 
@@ -388,3 +399,26 @@ top_bio_change <- data |>
   summarize(impact_change = sum(impact_change,na.rm=T))
 
 top_bio_change$proportion <- (top_bio_change$impact_change / sum(top_bio_change$impact_change))*100
+
+
+# change by intensity
+lu_int_sum <- lu_int_data|>
+  group_by(year, intensity)|>
+  summarize(impact = sum(impact, na.rm=T)*100, 
+            impact_change = sum(impact_change, na.rm=T)*100)
+
+
+# change by type
+lu_type_sum <- lu_int_data|>
+  group_by(year, LU_type)|>
+  summarize(impact = sum(impact, na.rm=T)*100, 
+            impact_change = sum(impact_change, na.rm=T)*100)|>
+  mutate(impact_change = round(impact_change,2))
+
+# change by region
+lu_type_reg <- data|>
+  group_by(year, country_group, CONTINENT)|>
+  summarize(impact = sum(impact, na.rm=T)*100, 
+            impact_change = sum(impact_change, na.rm=T)*100)|>
+  mutate(impact_change = round(impact_change,2))|>
+  filter(year == 2024)

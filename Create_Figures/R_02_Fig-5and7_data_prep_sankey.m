@@ -106,8 +106,8 @@ croptype_names = table2array(croptype_key(:,1));
 country_names = table2array(country_key(:,1));
 
 intensity_group = {'a','b','c'};
-croptype_group  = {'d','e','f','g','h','i','j','k','l','m','n','o'};
-country_group   = {'p','q','r','s','t','u','v','w','x','y'};
+croptype_group  = {'d','e','f','g','h','i','j','k','l','m','n','o','p'};
+country_group   = {'q','r','s','t','u','v','w','x','y','z'};
 
 %% Create empty containers
 rows = [];
