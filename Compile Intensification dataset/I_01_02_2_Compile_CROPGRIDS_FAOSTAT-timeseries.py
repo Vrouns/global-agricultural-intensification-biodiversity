@@ -4,20 +4,25 @@ import geopandas as gpd
 import pandas as pd
 import os
 import netCDF4
+import matplotlib.pyplot as plt
 
+os.chdir("h:\\02_Projekte\\03_Intensification-fragmentation-CFs\\")
 # 1. Load change factor table
-df = pd.read_csv("../data/05_crop_types/CG/FAOSTAT/FAOSTAT_codes/FAOSTAT_change_2024.csv")
+df = pd.read_csv("data/05_crop_types/CG/FAOSTAT/FAOSTAT_codes/FAOSTAT_change_2000-2024.csv")
+
 
 # 2. Load country code raster
-with rasterio.open("../data/05_crop_types/CG/country_raster_CG.tif") as src:
+with rasterio.open("data/05_crop_types/CG/country_raster_CG.tif") as src:
     country_codes = src.read(1)
+    # check unique country_codes (raster values)
+    unique_codes = np.unique(country_codes)
     code_profile = src.profile 
 
 # Create output folder
-os.makedirs("../data/05_crop_types/CG/time_series", exist_ok=True)
+os.makedirs("data/05_crop_types/CG/time_series", exist_ok=True)
 
 # 3. Create a blank raster for writing the metadata
-with rasterio.open("../data/05_crop_types/CG/blanko_raster.tif") as src:
+with rasterio.open("data/05_crop_types/CG/blanko_raster.tif") as src:
     blank_r = src.read()
     base_profile = src.profile
     transform = src.transform
@@ -35,7 +40,7 @@ for year in df["year"].unique():
     
     
     for crop in crop_layers:
-        out_path = f"../data/05_crop_types/CG/time_series/pred_{crop}_{year}.tif"
+        out_path = f"data/05_crop_types/CG/time_series/pred_{crop}_{year}.tif"
     
         # Skip if file already exists
         if os.path.exists(out_path):
@@ -45,9 +50,10 @@ for year in df["year"].unique():
         if crop == "yautia":
             continue
         crop_df = year_df[year_df["CROPGRIDS"] == crop]
-        base_path = f"../data/01_raw/CROPGRID/CROPGRIDSv1.08_NC_maps/CROPGRIDSv1.08_{crop}.nc"
+        base_path = f"data/01_raw/CROPGRID/CROPGRIDSv1.08_NC_maps/CROPGRIDSv1.08_{crop}.nc"
         base_layer = netCDF4.Dataset(base_path)
         base_area = base_layer['croparea'][:]  # Safely load array
+        base_area = np.flipud(base_area)   # row 0 -> north, matches rasterio/GeoTIFF convention
         base_layer.close()
         adjusted_layer = base_area.copy()
 

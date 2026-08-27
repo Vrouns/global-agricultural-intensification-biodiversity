@@ -13,13 +13,23 @@ library(terra)
 library(purrr)
 
 fert_path <- "data/01_raw/Adalibieke_fertilizer_crops/"
-harvest <- rast(paste0(fert_path,"Harvested_area_1961-2020.h5"))
-final_path <- "data/03_intensity/LUH2/0_intermediate/crops/Adalibieke_fertilizer_crops/"
-out_path_rep <- "data/02_resampled/LUH2/"
-out_path <- "./data/03_intensity/LUH2-GCB2025/0_intermediate/crops/"
+
+final_path <- "data/02_resampled/LUH2_GCB2025_first_submission/Adalibieke_fertilizer_crops"
 fert_files <- list.files(final_path, pattern = "N_app_tot.*\\.tif$", full.names = TRUE) # if only specific years add indices[1:5]
+
+out_path_rep <- "data/02_resampled/LUH2/" # where reprojected total raster is located
+
+# outpath for classified fertilizer  raster
+out_path <- "data/03_intensity/LUH2_GCB2025/crops/variables_class/fertilizer_class/"
 path_LUH2_updated <- "../04_Intensification_TS_expansion/data/LUH_update_states4.nc"
 
+
+harvest <- rast(paste0(fert_path,"Harvested_area_1961-2020.h5"))
+
+# for extentions
+ext_path <- "data/02_b_extention_datasets/Nitrogen/"
+ext_files <- list.files(ext_path, pattern = "LUH2.*\\.tif$", full.names = TRUE)
+ext_rast <- rast(ext_files)
 
 # write functions ---------------------------------------------------------
 
@@ -119,7 +129,7 @@ N_app_calc <- function(year, harvest_file_year,
 }
 
 
-# loop over years ---------------------------------------------------------
+# Step 2: Calculate total N-application for crops -----------------------------
 
 if (!dir.exists(final_path)){dir.create(final_path)}
 
@@ -127,7 +137,7 @@ start_year = 2000
 end_year = 2020
 
 # LUH2 dataset for reference
-path_LUH2 <- "./data/01_raw/LUH2_data/states.nc"
+path_LUH2 <- "data/01_raw/LUH2_data/states.nc"
 LUH2_rast <- rast(path_LUH2)
 
 year <- 2015
@@ -149,14 +159,6 @@ year = 2020
 for (year in c(start_year:end_year)) {
   N_app_path <- paste0( "./data/02_resampled/LUH2/Adalibieke_fertilizer_crops/Adalbieke_", year, "_N_application/")
   
-  # crop to casestudy extent
-  # hilda_crop <- crop(hilda_15, study_area)
-  # filter out crops
-  # hilda_crop_filter <- hilda_crop == 22
-  
-  #ggplot()+
-  #  geom_spatraster(data = as.factor(hilda_crop_filter))
-  
   proj_hilda <- crs(ref) 
   ext_hilda <- ext(ref)
   # Fertilized area
@@ -171,8 +173,7 @@ for (year in c(start_year:end_year)) {
   
   # transpose the raster as it is stored the wrong way round and assign projection and extent
   harvest_year <- fix_raster(harvest[[indices_year]], extent = ext_hilda, projection = proj_hilda)
-  # plot(harvest_2015[[1]])
-  
+
   # Calculate N-application rate per year
   # create path if necessary
   if (!dir.exists(N_app_path)){dir.create(N_app_path)}
@@ -205,7 +206,7 @@ for (year in c(start_year:end_year)) {
 }
 
 
-# Intensity dataset compilation -------------------------------------------
+# Step 3: Intensity definition -------------------------------------------
 # Thresholds for fertilizer data according to Overmars et al.--------
 N_app_year_crop_files <- list.files(paste0(out_path_rep,"Adalibieke_fertilizer_crops/Adalbieke_",year,"_N_application"), full.names=T)
 N_app_year_crop <- rast(N_app_year_crop_files)
@@ -213,58 +214,44 @@ N_app_sum <- sum(N_app_year_crop, na.rm=T)
 boxplot(N_app_sum)
 
 
+
 # read in data
 fert_data <- rast(fert_files)
-LUH2_update <- rast(path_LUH2_updated)
-years <- 2000:2020
-LUH2_start_year <- 850
-
-# calculate cropland area in ha 
-# crops_stack <- c(lapply(years, function(y) {
-#   
-#   idx <- y - LUH2_start_year + 1
-#   
-#   C3a   <- LUH2_update[[grep("^c3ann_", names(LUH2_update))[idx]]]
-#   C4a   <- LUH2_update[[grep("^c4ann_", names(LUH2_update))[idx]]]
-#   C3p   <- LUH2_update[[grep("^c3per_", names(LUH2_update))[idx]]]
-#   C4p   <- LUH2_update[[grep("^c4per_", names(LUH2_update))[idx]]]
-#   C3nfx <- LUH2_update[[grep("^c3nfx_", names(LUH2_update))[idx]]]
-#   
-#   C3a + C4a + C3p + C4p + C3nfx
-# }))
-# crops_stack <- rast(crops_stack)
-# names(crops_stack) <- paste0("crops_tot_", years)
-# # calculate cropland area in ha 
-# crops_area <- crops_stack*cellSize(crops_stack$crops_tot_2000, unit = "ha")
-# # set zero cropland to NA
-# crops_area[crops_area == 0] <- NA
-
 # adjust filenames 
 names(fert_data) <- basename(fert_files)
 
-# reproject to LUH2 resolution summing up the fertilizer input 
-fert_rep <- project(fert_data, crops_stack$crops_tot_2000, method = "sum")
 
-# # divide the reprojected raster by the cellsizes to obtain amount of N-fertilizer per ha
-# 
-# # get fertilizer input per ha cropland
-# fert_ha_crop <- fert_rep / crops_area
-# boxplot(fert_ha_crop) # --> values are way too high!!! 
+LUH2_update <- rast(path_LUH2_updated)
+years <- 2000:2020
+years_ext <- 2021:2024
+LUH2_start_year <- 850
+
+# define a sample res
+sample_ras <- LUH2_update$c3ann_1
+
+# remove NA from fert_data 
+fert_data <- ifel(is.na(fert_data), 0, fert_data)
+# reproject to LUH2 resolution summing up the fertilizer input 
+fert_rep <- project(fert_data, sample_ras, method = "sum")
+
 
 # fertilizer area
+# divide by cellsize, since dividing it by cropland area returns irrealistic high values 
+# (tested in advance)
 fert_ha <- fert_rep / cellSize(fert_rep, unit = "ha")
-plot(fert_ha_cellsize$N_app_tot_2000_LUH2.tif>2000)
-boxplot(fert_ha$N_app_tot_2000_LUH2.tif)
+plot(fert_ha_ext$N_total_LUH2_2021>150)
+boxplot(fert_ha$N_total_LUH2_2021)
 
 # set thresholds to define intensity level per pixel
-# low 0-50, medium 50-150, high >150 kg / ha
+# Baseline: low 0-50, medium 50-150, high >150 kg / ha
 
-class_matrix <- matrix(c(-Inf, 50, 1, # Low
-                         50, 150, 2, # Medium
-                         150, Inf, 3),
-                       # High
-                       ncol = 3,
-                       byrow = TRUE)
+#Threshold definition 
+low_threshold <- 50 # upper boundary of low-definition
+med_threshold <- 150 # upper boundary of med-definition
+class_matrix <- matrix(c(0, low_threshold, 1,  # Low
+                         low_threshold, med_threshold, 2, # Medium
+                         med_threshold, Inf, 3),   # High
+                       ncol=3, byrow=TRUE)
 
 # classify whole raster
 fertilizer_classified <- classify(
@@ -274,4 +261,123 @@ fertilizer_classified <- classify(
   filename = paste0(out_path, "classified_fertilizer_intensity_rep_", start_year, "-", end_year,".tif"),
   overwrite = T
 )
-            
+
+#######
+# extention
+# for extention 
+fert_data_ext <- rast(ext_files)
+# for checking remove all other layers, keep last one 
+fert_data_ext <- ifel(is.na(fert_data_ext), 0, fert_data_ext)
+fert_rep_ext <- project(fert_data_ext, sample_ras, method = "sum")
+fert_ha_ext <- fert_rep_ext / cellSize(fert_rep_ext, unit = "ha")
+
+
+# classify extention
+fertilizer_classified <- classify(
+  fert_ha_ext,
+  class_matrix,
+  include.lowest = T,
+  filename = paste0(out_path, "classified_fertilizer_intensity_rep_2021-2024.tif"),
+  overwrite = T
+)
+
+# combine both 
+
+first_half <- rast("data/03_intensity/LUH2_GCB2025/crops_first_submission/variables_class/fertilizer_class/classified_fertilizer_intensity_rep_2000-2020.tif")
+extention<- rast("data/03_intensity/LUH2_GCB2025/crops/variables_class/fertilizer_class/classified_fertilizer_intensity_rep_2021-2024.tif")
+
+comb <- c(first_half, extention)
+
+# change names 
+names(comb) <- c(paste0("int_N_app_", 2000:2024))
+# write raster 
+writeRaster(comb,"data/03_intensity/LUH2_GCB2025/crops/variables_class/fertilizer_class/classified_fertilizer_intensity_2000-2024.tif",
+            overwrite=T)
+
+# Step 4: Sensitivity Analysis --------------------------------------------
+
+# First sensitivity analysis was to change thresholds in step 3 (=conservative scenario)
+low_threshold <- 25 # upper boundary of low-definition
+med_threshold <- 100 # upper boundary of med-definition
+class_matrix <- matrix(c(0, low_threshold, 1,  # Low
+                         low_threshold, med_threshold, 2, # Medium
+                         med_threshold, Inf, 3),   # High
+                       ncol=3, byrow=TRUE)
+
+# classify whole raster
+fertilizer_classified_con <- classify(
+  fert_ha,
+  class_matrix,
+  include.lowest = T,
+  filename = paste0(out_path, "classified_fertilizer_intensity_rep_", start_year, "-", end_year,"25_100.tif"),
+  overwrite = T
+)
+fertilizer_classified_con <- rast(paste0(out_path, "classified_fertilizer_intensity_rep_", start_year, "-2020_25_100.tif"))
+hist(values(fertilizer_classified_con$N_app_tot_2015.tif))
+
+# second: use Quantiles as in Scherer et al. 2023
+# (only for 2015 as showcase)
+fert_2015_val <- values(fert_ha$N_app_tot_2015.tif, na.rm=T)
+# filter out >0 values 
+fert_2015_val <- fert_2015_val[!is.na(fert_2015_val) & fert_2015_val > 0]
+min(fert_2015_val)
+
+fert_quantile <- quantile(fert_2015_val, na.rm = T)
+round(fert_quantile)
+# Include min and max ranges explicitly
+class_matrix <- matrix(c(-Inf, fert_quantile[2], 1,  # Low
+                         fert_quantile[2], fert_quantile[3], 2, # Medium
+                         fert_quantile[3], Inf, 3),   # High
+                       ncol=3, byrow=TRUE)
+
+fertilizer_classified <- classify(
+  fert_ha$N_app_tot_2015.tif,
+  class_matrix,
+  include.lowest = T,
+  filename = paste0(out_path, "classified_fertilizer_intensity_rep_2015_quantiles.tif"),
+  overwrite = T
+)
+
+hist(values(fertilizer_classified))
+
+# third: same quantile approach as above, but quantiles and fertilizer application (kg/ha)
+# are derived on the original (native) resolution raster, i.e. before reprojecting/summing
+# to LUH2 resolution. The classified raster is only resampled to LUH2 resolution afterwards,
+# using modal resampling so each LUH2 cell gets the majority class of its underlying pixels
+# (only for 2015 as showcase)
+
+# fertilizer application at native resolution (analogous to fert_ha, but before project())
+fert_ha_orig <- fert_data / cellSize(fert_data, unit = "ha")
+
+fert_2015_val_orig <- values(fert_ha_orig$N_app_tot_2015.tif, na.rm = T)
+# filter out >0 values
+fert_2015_val_orig <- fert_2015_val_orig[!is.na(fert_2015_val_orig) & fert_2015_val_orig > 0]
+
+fert_quantile_orig <- quantile(fert_2015_val_orig, na.rm = T)
+round(fert_quantile_orig)
+# Include min and max ranges explicitly
+class_matrix <- matrix(c(-Inf, fert_quantile_orig[2], 1,  # Low
+                         fert_quantile_orig[2], fert_quantile_orig[3], 2, # Medium
+                         fert_quantile_orig[3], Inf, 3),   # High
+                       ncol=3, byrow=TRUE)
+
+# classify at native resolution
+fertilizer_classified_orig <- classify(
+  fert_ha_orig$N_app_tot_2015.tif,
+  class_matrix,
+  include.lowest = T,
+  filename = paste0(out_path, "classified_fertilizer_intensity_orig_2015_quantiles.tif"),
+  overwrite = T
+)
+
+# resample the classified (categorical) raster to LUH2 resolution using modal resampling
+fertilizer_classified_orig_rep <- resample(
+  fertilizer_classified_orig,
+  sample_ras,
+  method = "average",
+  overwrite = T
+)
+fertilizer_classified_orig_rep_round <- round(fertilizer_classified_orig_rep,digits=0)
+hist(values(fertilizer_classified_orig_rep_round))
+
+writeRaster(fertilizer_classified_orig_rep_round, paste0(out_path, "classified_fertilizer_intensity_rep_2015_quantiles_avg.tif"))

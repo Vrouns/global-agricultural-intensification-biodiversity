@@ -1,0 +1,269 @@
+---
+title: "FAOSTAT_Cropgrids II "
+output: html_notebook
+---
+
+# Backcasting CROPGRIDS from 2020 to 2000 II
+
+IDEA Assume distribution remains more or less the same adjust sum of crops with FAOSTAT data
+
+set paths to dir, read packages etc
+
+```{r}
+library(dplyr)
+library(terra)
+library(tidyr)
+library(readxl)
+library(countrycode)
+library(readr)
+data_dir <- "data/"
+```
+
+## Clean FAOSTAT data
+
+# downloaded for all years
+
+```{r}
+FAO_csv <- read.csv(paste0(data_dir,
+                    "05_crop_types/CG/FAOSTAT/Production_Crops_Livestock_E_All_Data/Production_Crops_Livestock_E_All_Data.csv"
+))
+
+# clean this a bit 
+FAO_cleaned <- FAO_csv |>
+  filter(Element == "Area harvested") |>
+  filter(Area.Code < 5000 ) |> # eliminate all the Continents / world region figures
+
+  select(
+    # Keep metadata columns (adjust as needed)
+    `Area.Code`, `Area.Code..M49.`, Area, `Item.Code`, `Item.Code..CPC.`, Item,
+    Element, Unit,
+    # Select year columns from 2000 onwards excluding F and N
+    matches("^Y(20(0[0-9]|1[0-9]|2[0-9]|30))$")
+    )|>  
+  mutate(
+    area_code_M49 = parse_number(`Area.Code..M49.`),
+    iso3 = countrycode(area_code_M49, "un", "iso3c"),
+    iso3 = case_when(
+      area_code_M49 == 158 ~ "TWN",
+      TRUE ~ iso3
+  ))
+
+
+table_crops_matching <- read_xlsx(paste0(data_dir, "01_raw/CROPGRID/CODES/CROPS_matching_v17.xlsx"))
+
+table_crops_matching_unique <- table_crops_matching |>
+  distinct(`FAO NAME`, .keep_all = TRUE) |>
+  select(`FAO NAME`, `REMAP MRF NAME`)
+
+# merge both tables to have the final crop name in the dataset.
+
+FAO_cleaned <- FAO_cleaned |>
+  left_join(table_crops_matching_unique, by = join_by(Item == `FAO NAME`))
+
+```
+
+--\> I just assigned the existing FAOSTAT Items to the classes from CROPGRIDS. Next step:
+
+Add the "new" Item code to the table and bring it to a long format
+
+```{r}
+crops_match2 <- readr::read_csv2(paste0(data_dir,
+                                      "/05_crop_types/CG/FAOSTAT/FAOSTAT_codes/CROPS_matching_allyears.csv"))
+# transfer FAO_cleaArea.Code# transfer FAO_cleaned to a long format
+# ts stands for timeseries 
+FAO_cleaned2 <- FAO_cleaned |>
+  left_join(crops_match2, by = join_by(Item == FAO))
+
+FAO_long_ts <- FAO_cleaned2 |>
+  filter(Area.Code < 5000 ) |> # eliminate all the Continents / world region figures
+  select(Area, area_code_M49,iso3, Item,CROPGRIDS, Y2000, Y2001, Y2002,Y2003, Y2004, Y2005, Y2006, 
+         Y2007, Y2008, Y2009, Y2010, Y2011, Y2012, Y2013, Y2014, Y2015,
+         Y2016, Y2017, Y2018, Y2019, Y2020, Y2021, Y2022, Y2023,Y2024)|>
+  pivot_longer(cols = starts_with("Y"), 
+               names_to = "Year", 
+               values_to = "area_ha", 
+               values_drop_na = T) |>
+    mutate(Year = as.factor(gsub("Y", "", Year)))|>
+  filter(CROPGRIDS != "No") |>
+  filter(Area != "China")
+
+head(FAO_long_ts)
+
+```
+
+Looks good. Safe it as csv
+
+```{r}
+write.csv(FAO_long_ts, paste0(data_dir, "/05_crop_types/CG/FAOSTAT/FAOSTAT_codes/FAOSTAT_cleaned_2000-2024.csv"), 
+          row.names = F)
+```
+
+# Calculate change for each year to baseline
+
+Baseline is 2020
+
+## Check baseline data from CG Codes vs downloaded FAOSTAT data
+
+```{r}
+FAO_20_org <- read_xlsx("data/01_raw/CROPGRID/CODES/FAOSTAT_ALL_2020_edited.xlsx")
+# combine with cropgrids 
+FAO_20_org <- FAO_20_org |>
+  left_join(table_crops_matching_unique, join_by(Item == `FAO NAME`))
+
+sum(FAO_20_org$Value, na.rm=T)
+
+FAO_base <- FAO_long_ts |>
+  filter(Year == 2020)
+
+sum(FAO_base$area_ha)
+
+# check where the difference is? 
+
+FAO_b_comb <- FAO_base |>
+  group_by(Area, CROPGRIDS) |>
+  summarize(area_ha = sum(area_ha, na.rm=T))|>
+  left_join(FAO_20_org, by = join_by(Area == Area, CROPGRIDS == `REMAP MRF NAME`))|>
+  select(Area,CROPGRIDS, Value, area_ha)
+
+FAO_b_comb$diff <- FAO_b_comb$area_ha - FAO_b_comb$Value
+
+# summarize by croptype 
+FAOct_diff <- FAO_b_comb |>
+  group_by(CROPGRIDS) |>
+  summarize(area_ha = sum(area_ha, na.rm=T), 
+            Value = sum(Value, na.rm=T), 
+            diff = sum(diff, na.rm=T))
+```
+
+--\> in some cases, the values do not align, this is when Tian et al. chose national datasets to correct FAOSTAT statistics --\> here we will just take FAOSTAT data for the sake of simplification.
+
+## Calculate the change per crop and country to baseline
+
+```{r}
+FAO_long_change <- FAO_long_ts |>
+  left_join(FAO_base, by = join_by(Item == Item, CROPGRIDS == CROPGRIDS, iso3 ==iso3,Area == Area,area_code_M49 ==area_code_M49))|>
+  rename(base_area = area_ha.y, 
+         area_y = area_ha.x, 
+          year =Year.x)|>
+  select(!Year.y) |>
+  mutate(
+    bbase_area = coalesce(base_area, area_y),              # replace NAs
+    bbase_area = if_else(bbase_area == 0, 1e-6, bbase_area), # avoid division by zero
+    change_prop = area_y / bbase_area,
+    change_absolute = area_y - bbase_area
+  )
+
+```
+
+### Remove country-crop combination with 0 values from 2020 
+Division by 0 --> some crops in some countrys report 0 harvest in 2020 but do report in previous years 
+Problem now: Cannot spatially backcast them using CROPGRIDS --> remove those crops from the countries 
+
+```{r}
+FAO_long_change <- FAO_long_change |>
+  filter(base_area!=0)
+```
+
+## Create change-raster per crop-type
+
+Now start with the tricky part: Backcasting this to the rasterdataset
+
+first: load country-raster
+
+```{r}
+country_rast <- rast("data/04_bia_inputs/LUH2/country_raster.tif")
+shp_country <- vect("H:/02_Projekte/allgemein_biodiversity_impact/02_data/country_shp/ne_110m_admin_0_countries.shp")
+countries_df <- data.frame(shp_country)
+countries_df$country_code<- c(1:nrow(countries_df))
+shp_country$country_code<- c(1:nrow(shp_country))
+
+# Use existing ISO3 field from Natural Earth
+countries_df$country_id <- as.numeric(factor(countries_df$ISO_A3))
+
+country_lookup <- countries_df[, c("country_id", "ISO_A3", "NAME")]
+
+
+# merge this table to the change table 
+country_name_map <- tibble::tibble(
+  FAO = c("Bolivia (Plurinational State of)", "Viet Nam", "Côte d'Ivoire", "Iran (Islamic Republic of)", 
+          "Lao People's Democratic Republic", "Republic of Korea", "Democratic People's Republic of Korea", 
+          "Democratic Republic of the Congo", "Republic of Moldova", "Russian Federation", 
+          "Syrian Arab Republic", "United Republic of Tanzania", 
+          "United Kingdom of Great Britain and Northern Ireland", 
+          "Brunei Darussalam", "China, mainland", "China, Taiwan Province of", 
+          "China, Hong Kong SAR", "China, Macao SAR", "Micronesia (Federated States of)", 
+          "Venezuela (Bolivarian Republic of)", "Eswatini", "The Bahamas", "North Macedonia"),
+  shp = c("Bolivia", "Vietnam", "Ivory Coast", "Iran", 
+          "Laos", "South Korea", "North Korea", 
+          "Democratic Republic of the Congo", "Moldova", "Russia", 
+          "Syria", "Tanzania", 
+          "United Kingdom", 
+          "Brunei", "China", "Taiwan", 
+          "Hong Kong", "Macau", "Micronesia", 
+          "Venezuela", "eSwatini", "Bahamas", "North Macedonia")
+)
+
+FAO_long_change <- FAO_long_change |>
+  left_join(country_name_map, by = c("Area" = "FAO")) |>
+  mutate(country = coalesce(shp, Area)) |>
+ select(-shp) |>
+left_join(
+  countries_df |> select(ISO_A3, country_code),
+  by = c("iso3" = "ISO_A3")
+)
+
+
+
+# get area per year 
+print(FAO_long_change |>
+      group_by(year)|>
+      summarize(area_ha = sum(area_y, na.rm=T)))
+```
+### add information whether treecrop or not 
+```{r}
+treecrops <- c("abaca", "agave", "almond", "apple", "apricot", "areca", "avocado", 
+               "banana", "carob", "cashew", "cashewapple", "cherry", "chestnut", 
+               "citrusnes", "coconut", "cocoa", "coffee", "date", "fig", "fruitnes", 
+               "grape", "grapefruitetc", "hazelnut", "karite", "kiwi", "kolanut", 
+               "lemonlime", "mango", "oilpalm","olive", "orange", "papaya", "peachetc", "pear", 
+               "persimmon", "pimento", "pineapple", "pistachio", "plantain", "plum", 
+               "quince", "rasberry", "rubber", "sourcherry", "stonefruitnes", 
+               "tea", "tung", "vanilla", "walnut")
+
+FAO_long_change$type <- "crop"
+FAO_long_change$type[FAO_long_change$CROPGRIDS %in% treecrops] <- "treecrop" 
+```
+
+```{r}
+write.csv(FAO_long_change, paste0(data_dir, "/05_crop_types/CG/FAOSTAT/FAOSTAT_codes/FAOSTAT_change_2000-2024.csv"), 
+          row.names = F)
+```
+
+
+### save change dataset, further proceed in python with script I_01_02_2 
+
+
+```{r}
+aniseetc <- FAO_long_change |>
+  filter(CROPGRIDS == "aniseetc"&
+           year == 2019)
+
+sum(aniseetc$area_y, na.rm=T)
+
+# Prepare raster for python processing
+sample_CG <-  rast("data/01_raw/CROPGRID/CROPGRIDSv1.08_NC_maps/CROPGRIDSv1.08_yautia.nc")
+# prepare a country raster based on FABIO (from Shuntian)
+names(shp_country)
+country_shp_rast <- rasterize(shp_country, sample_CG,field = "country_code",touches = T)
+plot(country_shp_rast)
+writeRaster(country_shp_rast, "data/05_crop_types/CG/country_raster_CG.tif", overwrite=T)
+
+# write raster to take this as a blank for python 
+blanko_r <- rast(country_shp_rast, vals = 0)
+writeRaster(blanko_r,"data/05_crop_types/CG/blanko_raster.tif")
+
+```
+
+# now proceed in Python!!! 
+
+
