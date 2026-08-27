@@ -19,11 +19,11 @@ import csv
 dataset_used = "LUH2_GCB2025"
 ecoreg_path = "H:/02_Projekte/allgemein_biodiversity_impact/02_data/ecoregions/wwf_terr_ecos.shp"
 CF_path = "../literature/Scherer-et-al_2023/CF_domain.csv"
-country_path = f"../data/04_bia_inputs/{dataset_used}/country_raster.tif"
+country_path = f"../data/04_bia_inputs/LUH2/country_raster.tif"
 shpcountries_path = "H:/02_Projekte/allgemein_biodiversity_impact/02_data/country_shp/ne_110m_admin_0_countries.shp"
 now = datetime.now().isoformat()
 status_log_file = f"../data/03_intensity/{dataset_used}/status_log/status_log.csv"  
-out_path = f"../output/biodiversity_impact_assessment/{dataset_used}/"
+out_path = f"../output/biodiversity_impact_assessment/LUH2_GCB2025_rev_sensitivity/"
 
 
 # Load CF data 
@@ -80,30 +80,26 @@ def load_CF_rasters(lu_type):
     return np.nan_to_num(np.stack(CF_rasters, axis=0), nan = 0)
 
 
-## Function to calculate biodiversity impact
-def calculate_biodiversity_impact(lu_type, year, CF_stack, country_raster):
+## Function to calculate the biodiversity impact raster
+def calculate_impact_raster(lu_type, year, CF_stack):
 
     """
-    Calculates biodiversity impact for a given land-use type and year.
+    Calculates the biodiversity impact raster for a given land-use type and year
+    and writes it to disk as a GeoTIFF.
 
     Parameters:
-        lu_type (str): Land use type. Must be one of ["crops", "plantations", "pasture", "builtup", "forest"].
+        lu_type (str): Land use type. Must be one of ["crops", "plantations", "pasture", "builtup", "forest", "rangeland"].
         year (int): Year of the data.
-        cell_areas (np.ndarray): Array of cell areas in square meters.
         CF_stack (np.ndarray): CF raster stack for intensity levels.
-        country_raster (np.ndarray): Raster with country IDs.
-        profile (dict): Metadata for output raster files.
 
     Outputs:
-        Writes 
-        1. a GeoTIFF file with impact data and 
-        2. a CSV file with per-country impacts.
+        Writes a GeoTIFF file with impact data.
     """
 
     chunk_path = f"{chunk_folder}{lu_type}_intensity_{year}.tif"
     assert os.path.exists(chunk_path), f"Input file not found: {chunk_path}"
 
-    valid_lu_types = ["crops", "plantations", "pasture", "builtup", "forest"]
+    valid_lu_types = ["crops", "plantations", "pasture", "builtup", "forest","rangeland"]
     assert lu_type in valid_lu_types, f"Invalid land use type: {lu_type}. Must be one of {valid_lu_types}"
     with rasterio.open(chunk_path) as src2:
         intensity_low = src2.read(1)
@@ -117,99 +113,65 @@ def calculate_biodiversity_impact(lu_type, year, CF_stack, country_raster):
     intensity_stack = np.stack([intensity_low,intensity_med,intensity_high], axis=0)
     intensity_stack = np.nan_to_num(intensity_stack, nan=0)
 
-    
+
     impact_stack = intensity_stack *  CF_stack
 
-    # Define output paths
-    output_tif_filename = f"{out_path}/{lu_type}/{lu_type}_impact_{year}.tif"
-    output_csv_filename = f"{out_path}/{lu_type}/{lu_type}_impact_{year}.csv"
+    # Define output path
+    output_dir = os.path.join(out_path, lu_type)
+    os.makedirs(output_dir, exist_ok=True)
+    output_tif_filename = f"{output_dir}/{lu_type}_impact_{year}.tif"
     profile.update(count=impact_stack.shape[0], compress='deflate')
-    
+
     with rasterio.open(output_tif_filename, 'w', **profile) as dst:
         i = 0
         for i in range(impact_stack.shape[0]):
             dst.write(impact_stack[i], i + 1)  # Write each intensity's impact to a separate band
-    
-    country_impacts = []
 
-    # Calculate impact per country
+    print(f"Created impact raster {output_tif_filename}")
 
-    # Use advanced indexing to group pixel indices by country
-    country_ids = np.unique(country_raster[country_raster > 0]) # Get unique country IDs (excluding 0)
 
-    # Calculate impact sums for each country and intensity in a vectorized manner
-    impact_per_country = np.array([
-    impact_stack[:, country_raster == country_id].sum(axis=1)
-    for country_id in country_ids])     
+## Function to calculate the per-country impact CSV from an existing impact raster
+def calculate_impact_csv(lu_type, year, country_raster):
 
-    # Create a DataFrame in one go
-    country_names = shpcountries.GEOUNIT # Adjust index for 1-based country IDs
-    data = {
-        "country": np.repeat(country_names, 3),  # Each country repeated for the 3 intensity levels
-        "impact_sum": impact_per_country.flatten(),  # Flatten impact values by intensity
-        "intensity": np.tile([1, 2, 3], len(country_names))
-    }
+    """
+    Reads the already-computed impact raster for a given land-use type and year,
+    aggregates impact per country, and writes a CSV file (no impact recalculation).
 
-    impact_df = pd.DataFrame(data)
-    impact_df.to_csv(output_csv_filename, mode='w', header=True, index=False)
-    print(f"Created new CSV with impact {output_csv_filename}")
+    Parameters:
+        lu_type (str): Land use type. Must be one of ["crops", "plantations", "pasture", "builtup", "forest", "rangeland"].
+        year (int): Year of the data.
+        country_raster (np.ndarray): Raster with country IDs.
+    """
 
-    filename = f"{lu_type}_intensity_{year}.tif"
+    output_tif_filename = f"{out_path}/{lu_type}/{lu_type}_impact_{year}.tif"
+    assert os.path.exists(output_tif_filename), f"Impact raster not found: {output_tif_filename}"
 
-    # Log status with timestamp
-    # Ensure log file exists with header
-    if not os.path.exists(status_log_file):
-        with open(status_log_file, "w", newline="") as log:
-            writer = csv.writer(log)
-            writer.writerow(["filename", "area_status", "bia_status", "area_status_timestamp", "bia_status_timestamp"])
+    with rasterio.open(output_tif_filename) as src:
+        impact_stack = src.read()  # shape: (intensity, H, W)
 
-    # Bestehende Zeilen laden
-    rows = []
-    updated = False
+    print(f" impact_stack created for {lu_type} in {year}")
 
-    with open(status_log_file, "r", newline="") as log:
-        reader = csv.DictReader(log)
-        for row in reader:
-            if row["filename"] == filename:
-                row["bia_status"] = "processed"
-                row["bia_status_timestamp"] = now
-                updated = True
-            rows.append(row)
 
-    # Falls nicht gefunden → neue Zeile hinzufügen
-    if not updated:
-        rows.append({
-            "filename": filename,
-            "area_status": "open",
-            "bia_status": "processed",
-            "area_status_timestamp": now,
-            "bia_status_timestamp": now
-        })
-
-    # Datei überschreiben
-    with open(status_log_file, "w", newline="") as log:
-        writer = csv.DictWriter(log, fieldnames=[
-            "filename", "area_status", "bia_status",
-            "area_status_timestamp", "bia_status_timestamp"
-        ])
-        writer.writeheader()
-        writer.writerows(rows)
 
 
 
 
 # Main execution
-lu_types = [ "crops","plantations","pasture"]
+lu_types = [ "crops", "plantations"]
 start_year = 2000
 end_year = 2019
 years = range(start_year, end_year+1)
 
 for lu_type in lu_types:
     print(f"Processing land use type: {lu_type}")
-    CF_stack = load_CF_rasters(lu_type) # always the same for every year
-    chunk_folder = f"../data/03_intensity/{dataset_used}/{lu_type}/"
+    lu_type_CF = lu_type
+    if lu_type == "rangeland":
+        lu_type_CF = "pasture"  # Adjust for naming consistency
+    CF_stack = load_CF_rasters(lu_type_CF) # always the same for every year
+    chunk_folder = f"../data/03_intensity/{dataset_used}/{lu_type}_first_submission/"
     for year in years:
         print(year)
-        calculate_biodiversity_impact(lu_type, year, CF_stack, country_raster)
+        calculate_impact_raster(lu_type, year, CF_stack)
+        calculate_impact_csv(lu_type, year, country_raster)
 
 

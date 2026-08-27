@@ -86,7 +86,8 @@ with rasterio.open(f"{output_folder}country_raster.tif", 'w', driver='GTiff',
         out=country_raster,  # The output array (country_raster)
         transform=transform,  # The affine transform
         fill=0,  # Fill no data areas with 0
-        dtype='uint32'  # Data type for the raster
+        dtype='uint32',  # Data type for the raster
+        all_touched=True,  # assign every pixel touched by a polygon, not just pixel centers, so coastal/border/small-island pixels aren't left unassigned (id 0)
     )
     
     # Write the rasterized data to the output file

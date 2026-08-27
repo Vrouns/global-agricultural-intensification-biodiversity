@@ -20,11 +20,13 @@ library(tidyr)
 version_LUH2 <- "LUH2_GCB2025" # either LUH2 or LUH2_GCB2025
 CG_org_path <- "data/01_raw/CROPGRID/CROPGRIDSv1.08_NC_maps/"
 CG_pred_path <- "data/05_crop_types/CG/time_series/"
-out_path <- paste0("data/05_crop_types/CG/", version_LUH2,"/")
+CG_pred_patched_path <- "data/05_crop_types/CG/time_series_mapbiomas_patched/"
+out_path <- paste0("data/05_crop_types/CG/", version_LUH2,"_rev_sensitivity/")
+if(! dir.exists(out_path)){dir.create(out_path)}
 
-c_intensity_path <- paste0("data/03_intensity/",version_LUH2,"/crops/")
-tc_intensity_path = paste0("data/03_intensity/",version_LUH2,"/plantations/")
-bia_path <- paste0("output/biodiversity_impact_assessment/",version_LUH2)
+c_intensity_path <- paste0("data/03_intensity/",version_LUH2,"/crops_first_submission/")
+tc_intensity_path = paste0("data/03_intensity/",version_LUH2,"/plantations_first_submission/")
+bia_path <- paste0("output/biodiversity_impact_assessment/",version_LUH2,"_rev_sensitivity/")
 
 lu_types <- c("crops", "plantations")
 int_levels <- c("light", "med", "high")
@@ -42,123 +44,131 @@ treecrops <- c("abaca", "agave", "almond", "apple", "apricot", "areca", "avocado
                "persimmon", "pimento", "pineapple", "pistachio", "plantain", "plum", 
                "quince", "rasberry", "rubber", "sourcherry", "stonefruitnes", 
                "tea", "tung", "vanilla", "walnut")
-year = 2000
 
-for (year in c(2001:2019)){
-  # Get cropgrid files for this year
-  if (year == 2020){# first: Resample CROPGRIDS to LUH2 resolution 
-    
-    croptype_files <- list.files(CG_org_path, full.names = T,pattern = 
-                                   paste0(year,"_.nc$"))
-    
-    croptype_files<- croptype_files[croptype_files!="../data/01_raw/CROPGRID/CROPGRIDSv1.08_NC_maps/Countries_2018.nc"]  
-    treecrop_files <- croptype_files[grepl(paste0(treecrops, collapse = "|"), croptype_files)]
-    
-    # Read a raster as blank file to resample the map to this resolution 
-    crops_int_rast <- rast(paste0(intensity_path,"crops_intensity_",year,".tif"))
-    
-    # read croparea layer and reproject building pixel wise sum 
-    process_crop_group <- function(files, ref_rast) {
-      if (length(files) == 0) return(NULL)
-      stack <- lapply(files, function(f) {
-        r <- rast(f)
-        r <- r[["croparea"]]
-        rproj <- project(r, ref_rast, method = "sum")
-        return(rproj)
-      })
-      rast(stack) |>
-        flip(direction = "vertical") |>
-        mask(., . > 0, maskvalues = 0)
-    }
-    
-  } else {
-    croptype_files <- list.files(CG_pred_path, full.names = T,pattern = 
-                                   paste0(year,".tif$"))
-    # Split into treecrops and other crops
-    treecrop_files <- croptype_files[grepl(paste0(treecrops, collapse = "|"), croptype_files)]
-    crop_files <- setdiff(croptype_files, treecrop_files)
-    
-    # Function to process both groups parallely 
-    process_crop_group <- function(files, ref_rast) {
-      if (length(files) == 0) return(NULL)
-      
-      stack <- lapply(files, function(f) {
-        r <- rast(f)
-        r_m <- mask(r, r > 0, maskvalues = 0) # remove negative values (= ocean /water)
-        rproj <- project(r_m, ref_rast, method = "sum")
-        return(rproj)
-      })
-      stack_r <- rast(stack)
-      stack_r <- flip(stack_r, direction = "vertical")
-    }
-  }
+# Function to process both groups parallely
+# mask negative values and project to LUH2 resolution
+process_crop_group <- function(files, ref_rast) {
+  if (length(files) == 0) return(NULL)
   
-  # Read a raster as blank file to resample the map to this resolution 
-  crops_int_rast <- rast(paste0(c_intensity_path,"crops_intensity_",year,".tif"))
-  tc_int_rast <- rast(paste0(tc_intensity_path,"plantations_intensity_",year,".tif"))
+  stack <- lapply(files, function(f) {
+    r <- rast(f)
+    r_m <- mask(r, r > 0, maskvalues = 0) # remove negative values (= ocean /water)
+    rproj <- project(r_m, ref_rast, method = "sum")
+    return(rproj)
+  })
+  stack_r <- rast(stack)
+}
+
+# Scaling to match LUH2 totals: LUH2_area / Cropgrid_FAO_total_area
+# make sure that LUH2 cropland/plantations extent is maintained. 
+
+scale_to_intensity <- function(r_stack, int_rast) {
+  crop_sum <- sum(r_stack, na.rm = TRUE)
+  int_sum  <- sum(int_rast, na.rm = TRUE)
   
-  # Process each group
-  crops_r <- process_crop_group(crop_files, crops_int_rast)
-  treecrops_r <- process_crop_group(treecrop_files, tc_int_rast)
+  # distribute the difference proportionally to each crop
+  factor <- ifel(crop_sum > 0, int_sum / crop_sum, 0)
+  r_scaled <- r_stack * factor
+  r_scaled[is.na(r_scaled)] <- 0
   
-  # name the layers 
-  names(crops_r) <- gsub(paste0("^pred_(.*)_", year, "\\.tif$"), "\\1", basename(crop_files))
-  names(treecrops_r) <- gsub(paste0("^pred_(.*)_", year, "\\.tif$"), "\\1", basename(treecrop_files))
+  # pixels with no CROPGRIDS coverage at all keep their intensity area as "unknown"
+  # instead of silently dropping out
+  unknown <- ifel(crop_sum > 0, 0, int_sum)
+  names(unknown) <- "unknown"
   
-  # Scaling to match LUH2 totals
-  # make sure that LUH2 cropland extent is maintained: 
+  return(c(r_scaled, unknown))
+}
+
+for (year in c(2000:2019)){
   
-  scale_to_intensity <- function(r_stack, int_rast) {
-    crop_sum <- sum(r_stack, na.rm = TRUE)
-    int_sum  <- sum(int_rast, na.rm = TRUE)
+  cat("//n Processing year", year)
+    # Get cropgrid files for this year, preferring the MapBiomas-patched version
+    # of a crop where one is available, falling back to the original prediction
+    crop_files <- list.files(CG_pred_path, full.names = T,pattern =
+                                     paste0(year,".tif$"))
+    # prefer the MapBiomas-patched file where a crop has one for this year;
+    # fall back to the original back-cast (pred_<crop>_<year>.tif) otherwise
+    # crop_files_patched <- list.files(CG_pred_patched_path, pattern = paste0(year,"_mapbiomas.tif$"), full.names = T)
+    # 
+    # patched_as_orig_basename <- sub("_mapbiomas\\.tif$", ".tif", basename(crop_files_patched))
+    # crop_files <- crop_files[!(basename(crop_files) %in% patched_as_orig_basename)]
+    # crop_files <- c(crop_files, crop_files_patched)
+    # 
+    # split crops and treecrops
+    treecrop_files <- crop_files[grepl(paste0(treecrops, collapse = "|"), crop_files)]
+    crop_files_crops <- crop_files[!(crop_files%in%treecrop_files)]
     
-    # distribute the difference proportionally to each crop
-    r_scaled <- r_stack * (int_sum / crop_sum)
-    
-    return(r_scaled)
-  }
+    # Read a raster as blank file to resample the map to this resolution
+    crops_int_rast <- rast(paste0(c_intensity_path,"crops_intensity_",year,".tif"))
+    tc_int_rast <- rast(paste0(tc_intensity_path,"plantations_intensity_",year,".tif"))
   
-  crops_r_cor <- scale_to_intensity(crops_r, crops_int_rast)
-  treecrops_r_cor <- scale_to_intensity(treecrops_r, crops_int_rast)
+    # Process each group
+    crops_r <- process_crop_group(crop_files_crops, crops_int_rast)
+    treecrops_r <- process_crop_group(treecrop_files, tc_int_rast)
+  
+    # name the layers (files may come from either the original or the
+    # MapBiomas-patched folder, so strip an optional "_mapbiomas" suffix too)
+    names(crops_r) <- gsub(paste0("^pred_(.*)_", year, "(_mapbiomas)?\\.tif$"), "\\1", basename(crop_files_crops))
+    names(treecrops_r) <- gsub(paste0("^pred_(.*)_", year, "(_mapbiomas)?\\.tif$"), "\\1", basename(treecrop_files))
 
   
-  # Save
-  writeRaster(crops_r_cor, paste0(out_path, "/crop_types_", year, ".tif"), overwrite = TRUE)
-  writeRaster(treecrops_r_cor, paste0(out_path, "/treecrop_types_", year, ".tif"), overwrite = TRUE)
+    crops_r_cor <- scale_to_intensity(crops_r, crops_int_rast)
+    treecrops_r_cor <- scale_to_intensity(treecrops_r, tc_int_rast)
+
   
+    # Save
+    writeRaster(crops_r_cor, paste0(out_path, "/crop_types_", year, ".tif"), overwrite = TRUE)
+    # add correction term here. 
+    writeRaster(treecrops_r_cor, paste0(out_path, "/treecrop_types_", year, ".tif"), overwrite = TRUE)
+    
 }
 
 
 
 # crop types per Intensity 
 for (year in c(2000:2019)){
+  message("computing crop types for ", year)
   for (lu_type in lu_types) {
     if (lu_type == "crops"){lu_p <- "crop"}
     if (lu_type == "plantations"){lu_p <- "treecrop"}
     
+    df_path <- file.path(
+      bia_path,
+      lu_type,
+      paste0("impact_", lu_type, "_type_", year, "_cor.csv")
+    )
     
-    intensity_path <- paste0("data/03_intensity/",version_LUH2,"/",lu_type, "/")
+    # if (file.exists(df_path)) {
+    #   message("File exists: ", df_path)
+    #   next
+    #   }
+    
+    intensity_path <- paste0("data/03_intensity/",version_LUH2,"/",lu_type, "_first_submission/")
     types_path <- paste0(out_path,lu_p, "_types_", year, ".tif")
+    # for corrected version of treecrops, add "cor" before .tif
     impact_path <- paste0(bia_path, "/", lu_type,"/", lu_type,"_impact_", year, ".tif")
-    
+
     # Load intensity raster
     crops_int_rast <- rast(paste0(intensity_path, lu_type, "_intensity_", year, ".tif"))
     crops_int_rast[is.na(crops_int_rast)] <- 0
-    
+
     # Load crop type raster
     crop_types_rast <- rast(types_path)
-    
+
     # Output dir for intensity split
     int_out_dir <- paste0(out_path, "crop_types_int/")
+    if (!dir.exists(int_out_dir)){dir.create(int_out_dir)}
 
     # Split by intensity & save shares
     for (i in seq_along(int_levels)) {
       bin_mask <- crops_int_rast[[i]] > 0
       ct <- crop_types_rast * bin_mask
       writeRaster(ct, paste0(int_out_dir, lu_type, "_", int_levels[i], "_", year, ".tif"), overwrite = TRUE)
-      
+
       share <- ct / sum(ct, na.rm = TRUE)
-      writeRaster(share, paste0(int_out_dir, "crop_types_share/", lu_type, "_", int_levels[i], "_share_", year, ".tif"), overwrite = TRUE)
+      share_dir <- file.path(int_out_dir, "crop_types_share")
+      if (!dir.exists(share_dir)){dir.create(share_dir)}
+      writeRaster(share, paste0(share_dir,"/",lu_type, "_", int_levels[i], "_share_", year, ".tif"), overwrite = TRUE)
     }
     
     
@@ -177,18 +187,17 @@ for (year in c(2000:2019)){
       
       area <- rast(paste0(int_out_dir, lu_type, "_", int_level, "_", year, ".tif"))
       crop_type_impact <- crop_share * impact_year[[i]]
-      
+  
       impact_country <- zonal(crop_type_impact, shp_country, fun = "sum", na.rm = TRUE)
       area_country <- zonal(area, shp_country, fun = "sum", na.rm = TRUE)
-      
+
       impact_country$country <- shp_country$GEOUNIT
       impact_country$year <- year
       impact_country$intensity <- int_level
       
       cols_to_pivot <- 1:(ncol(impact_country) - 3)
-      impact_long <- impact_country %>%
-        pivot_longer(cols = cols_to_pivot, names_to = "crop_type", values_to = "impact")
-      
+      impact_long <- impact_country %>%pivot_longer(cols = cols_to_pivot, names_to = "crop_type", values_to = "impact")
+
       area_country$country <- shp_country$GEOUNIT
       area_long <- area_country %>%
         pivot_longer(cols = cols_to_pivot, names_to = "crop_type", values_to = "area_ha")
@@ -197,7 +206,7 @@ for (year in c(2000:2019)){
     }
     
     # Save results
-    write.csv(unique(df), paste0(bia_path, "/impact_", lu_type, "_type_", year, ".csv"), row.names = FALSE)
+    write.csv(unique(df), df_path, row.names = FALSE)
   }
     
 } 
@@ -221,7 +230,7 @@ crop_files <- list.files(file.path(bia_path,"crops"), pattern = "type",
 crop_list <- lapply(crop_files, prep_table, "crops")
 
 #same for plantations 
-plant_files <- list.files(file.path(bia_path,"plantations"), pattern = "type", 
+plant_files <- list.files(file.path(bia_path,"plantations"), pattern = "_cor", # or cor in that case 
                           full.names = T)
 plant_list <- lapply(plant_files, prep_table, "plantations")
 
@@ -242,7 +251,7 @@ lu_df <- lu_df |>
 
 
 # save df 
-# write_xlsx(lu_df, paste0(bia_path,"crop_types_impact_all_years.xlsx"))
+#write_xlsx(lu_df, paste0(bia_path,"crop_types_impact_all_years.xlsx"))
 write.csv(lu_df, paste0(bia_path,"crop_types_impact_all_years.csv"))
 
 
@@ -250,17 +259,22 @@ write.csv(lu_df, paste0(bia_path,"crop_types_impact_all_years.csv"))
 # ################################
 # # double check no types 
 # ################################
-# lu_df <- read.csv(paste0(bia_path,"crop_types_impact_all_years.csv"))
-# lu_df_crops_2000 <- lu_df |>
-#   filter(year == 2000, lu_type == "crops")
-# sum(lu_df_crops_2000$impact, na.rm=T)*10000
-# 
-# test_uk <- lu_df |>
-#   filter(crop_type == "unknown")
-# unique(lu_df_crops_2000$crop_type)
-# 
-# crop_no_type <- read.csv("../output/biodiversity_impact_assessment/LUH2/crops/crops_impact_2000.csv")
-# sum(crop_no_type$impact_sum)*10000
-# 
-# past_no_type <- read.csv("../output/biodiversity_impact_assessment/LUH2/pasture/pasture_impact_2000.csv")
-# sum(past_no_type$impact_sum)*10000
+lu_df <- read.csv(paste0(bia_path,"crop_types_impact_all_years.csv"))
+lu_df_crops_2000 <- lu_df |>
+  filter(year == 2005, lu_type == "crops")|>
+  group_by(SOV_A3, intensity) |>
+  summarize(impact = sum(impact, na.rm=T))
+sum(lu_df_crops_2000$impact, na.rm=T)*10000
+
+crop_no_type <- read.csv("output/biodiversity_impact_assessment/LUH2_GCB2025_revision/crops/crops_impact_2005.csv")
+sum(crop_no_type$impact_sum)*10000
+
+
+plant_no_type <- read.csv("output/biodiversity_impact_assessment/LUH2_GCB2025_revision/plantations/plantations_impact_2005.csv")
+sum(plant_no_type$impact_sum)*10000
+
+lu_df_crops_2000 <- lu_df |>
+  filter(year == 2005, lu_type == "plantations")|>
+  group_by(SOV_A3, intensity) |>
+  summarize(impact = sum(impact, na.rm=T))
+sum(lu_df_crops_2000$impact, na.rm=T)*10000
